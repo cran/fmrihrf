@@ -12,7 +12,7 @@
 
 <meta name="author" content="Bradley R. Buchsbaum" />
 
-<meta name="date" content="2025-09-11" />
+<meta name="date" content="2026-02-09" />
 
 <title>HRF Generators</title>
 
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">HRF Generators</h1>
 <h4 class="author">Bradley R. Buchsbaum</h4>
-<h4 class="date">2025-09-11</h4>
+<h4 class="date">2026-02-09</h4>
 
 
 
@@ -377,20 +377,9 @@ a B-spline basis with 8 functions spanning 32 seconds:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># Create a B-spline basis using gen_hrf</span></span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>bs8 <span class="ot">&lt;-</span> <span class="fu">gen_hrf</span>(hrf_bspline, <span class="at">N =</span> <span class="dv">8</span>, <span class="at">span =</span> <span class="dv">32</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="fu">print</span>(bs8)</span>
-<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; function (t) </span></span>
-<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; hrf(t, ...)</span></span>
-<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; &lt;bytecode: 0x127e322e8&gt;</span></span>
-<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; &lt;environment: 0x123e9a950&gt;</span></span>
-<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;class&quot;)</span></span>
-<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; [1] &quot;HRF&quot;      &quot;function&quot;</span></span>
-<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;name&quot;)</span></span>
-<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; [1] &quot;hrf_bspline&quot;</span></span>
-<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;nbasis&quot;)</span></span>
-<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt; [1] 8</span></span>
-<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;span&quot;)</span></span>
-<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; [1] 32</span></span>
-<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; attr(,&quot;params&quot;)</span></span>
-<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co">#&gt; list()</span></span></code></pre></div>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; -- HRF: hrf_bspline --------------------------------------- </span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt;    Basis functions: 8 </span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt;    Span: 32 s</span></span></code></pre></div>
 <p>The returned value is a standard <code>HRF</code> object, so you can
 evaluate it or use it in model formulas like any other HRF.</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>times <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">32</span>, <span class="at">by =</span> <span class="fl">0.5</span>)</span>

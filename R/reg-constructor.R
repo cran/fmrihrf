@@ -1,9 +1,10 @@
 #' Internal Constructor for Regressor Objects
-#' 
+#'
 #' @keywords internal
 #' @return An S3 object of class `Reg` (and `list`) with components:
 #'   * `onsets`: Numeric vector of event onset times (seconds).
-#'   * `hrf`: An object of class `HRF` used for convolution.
+#'   * `hrf`: An object of class `HRF` used for convolution, OR a list of HRF
+#'     objects (one per event) for trial-varying HRFs.
 #'   * `duration`: Numeric vector of event durations (seconds).
 #'   * `amplitude`: Numeric vector of event amplitudes/scaling factors.
 #'   * `span`: Numeric scalar indicating the HRF span (seconds).
@@ -12,11 +13,12 @@
 #'     removed due to zero or `NA` amplitudes.
 #' @importFrom assertthat assert_that
 Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate=TRUE) {
-  
+
   # Initial conversions
   onsets    <- as.numeric(onsets)
   duration  <- as.numeric(duration)
   amplitude <- as.numeric(amplitude)
+
   assert_that(is.logical(summate), length(summate) == 1)
   summate   <- as.logical(summate)
   span_arg  <- as.numeric(span) # Store original arg
@@ -45,44 +47,74 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
   if (any(onsets < 0)) {
       stop("`onsets` must be non-negative.", call. = FALSE)
   }
-  
+
   # Recycle/Validate inputs *before* filtering
   # Use recycle_or_error from utils-internal.R
   duration  <- recycle_or_error(duration, n_onsets, "duration")
   amplitude <- recycle_or_error(amplitude, n_onsets, "amplitude")
-  
+
   # Check for invalid inputs early
   if (any(duration < 0, na.rm = TRUE)) stop("`duration` cannot be negative.")
-  
+
+  # Check if hrf is a list of HRFs (trial-varying case)
+
+  hrf_is_list <- is.list(hrf) && !inherits(hrf, "HRF")
+
+  if (hrf_is_list) {
+    # Validate list of HRFs
+    if (length(hrf) != 1 && length(hrf) != n_onsets) {
+      stop("`hrf` list must have length 1 or length equal to number of onsets (",
+           n_onsets, "), got ", length(hrf), ".", call. = FALSE)
+    }
+    # Validate each element is an HRF
+    for (i in seq_along(hrf)) {
+      hrf[[i]] <- make_hrf(hrf[[i]], lag = 0)
+      if (!inherits(hrf[[i]], "HRF")) {
+        stop("Element ", i, " of `hrf` list is not a valid HRF object.", call. = FALSE)
+      }
+    }
+    # Recycle if length 1
+    if (length(hrf) == 1) {
+      hrf <- rep(hrf, n_onsets)
+    }
+  }
 
   # Filter events based on non-zero and non-NA amplitude
-  if (n_onsets > 0) { 
+  if (n_onsets > 0) {
       keep_indices <- which(amplitude != 0 & !is.na(amplitude))
       # Store whether filtering occurred
       filtered_some <- length(keep_indices) < n_onsets
       # Store whether *all* were filtered
       filtered_all <- length(keep_indices) == 0
-      
+
       if (filtered_some) {
           onsets    <- onsets[keep_indices]
           duration  <- duration[keep_indices]
           amplitude <- amplitude[keep_indices]
+          # Also filter HRF list if applicable
+          if (hrf_is_list) {
+            hrf <- hrf[keep_indices]
+          }
           n_onsets  <- length(onsets) # Update count after filtering
       }
   } else {
       filtered_all <- TRUE # If input was empty, effectively all are filtered
   }
-  
-  # Ensure HRF is a valid HRF object using make_hrf
-  hrf  <- make_hrf(hrf, lag = 0) 
-  assert_that(inherits(hrf, "HRF"), msg = "Invalid 'hrf' provided or generated.")
-  
-  # Determine final span using %||% helper (ensure helper is available)
-  final_span <- attr(hrf, "span") %||% span_arg
-  # Optional: Adjust span based on max duration? (kept from old regressor, review)
-  # if (n_onsets > 0 && any(duration > final_span / 2)) {
-  #    final_span <- max(duration, na.rm=TRUE) * 2
-  # }
+
+  # Process single HRF case (non-list)
+  if (!hrf_is_list) {
+    hrf <- make_hrf(hrf, lag = 0)
+    assert_that(inherits(hrf, "HRF"), msg = "Invalid 'hrf' provided or generated.")
+  }
+
+  # Determine final span
+  if (hrf_is_list) {
+    # For list of HRFs, use max span across all HRFs
+    all_spans <- vapply(hrf, function(h) attr(h, "span") %||% span_arg, numeric(1))
+    final_span <- max(all_spans)
+  } else {
+    final_span <- attr(hrf, "span") %||% span_arg
+  }
 
   # Construct the final object
   out <- structure(list(
@@ -93,49 +125,68 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
     span        = final_span,
     summate     = summate
   ), class = c("Reg", "list"))
-  
+
   # Add attribute to signal if all events were filtered
-  attr(out, "filtered_all") <- filtered_all 
+  attr(out, "filtered_all") <- filtered_all
+  # Add attribute to indicate if HRF varies per trial
+
+  attr(out, "hrf_is_list") <- hrf_is_list
   return(out)
 }
 
 
 #' Construct a Regressor Object
-#' 
+#'
 #' Creates an object representing event-related regressors for fMRI modeling.
-#' This function defines event onsets and associates them with a hemodynamic 
+#' This function defines event onsets and associates them with a hemodynamic
 #' response function (HRF) to generate predicted time courses.
-#' 
+#'
 #' @param onsets A numeric vector of event onset times in seconds.
 #' @param hrf The hemodynamic response function (HRF) to convolve with the events.
-#'   This can be a pre-defined `HRF` object (e.g., `HRF_SPMG1`), a custom `HRF` 
-#'   object created with `as_hrf`, a function `f(t)`, or a character string 
-#'   referring to a known HRF type (e.g., "spmg1", "gaussian"). Defaults to `HRF_SPMG1`.
-#' @param duration A numeric scalar or vector specifying the duration of each event 
+#'   This can be:
+#'   \itemize{
+#'     \item A pre-defined `HRF` object (e.g., `HRF_SPMG1`)
+#'     \item A custom `HRF` object created with `as_hrf`
+#'     \item A function `f(t)`
+#'     \item A character string referring to a known HRF type (e.g., "spmg1", "gaussian")
+#'     \item A **list of HRF objects** for trial-varying HRFs (one per event, or length 1 to recycle)
+#'   }
+#'   Defaults to `HRF_SPMG1`.
+#' @param duration A numeric scalar or vector specifying the duration of each event
 #'   in seconds. If scalar, it's applied to all events. Defaults to 0 (impulse events).
-#' @param amplitude A numeric scalar or vector specifying the amplitude (scaling factor) 
+#' @param amplitude A numeric scalar or vector specifying the amplitude (scaling factor)
 #'   for each event. If scalar, it's applied to all events. Defaults to 1.
-#' @param span The temporal window (in seconds) over which the HRF is defined 
-#'   or evaluated. This influences the length of the convolution. If not provided, 
-#'   it may be inferred from the `hrf` object or default to 40s. **Note:** Unlike some
-#'   previous versions, the `span` is not automatically adjusted based on `duration`;
+#' @param span The temporal window (in seconds) over which the HRF is defined
+#'   or evaluated. This influences the length of the convolution. If not provided,
+#'   it may be inferred from the `hrf` object or default to 40s. For list HRFs,
+#'   the maximum span across all HRFs is used. **Note:** Unlike some previous
+#'   versions, the `span` is not automatically adjusted based on `duration`;
 #'   ensure the provided or inferred `span` is sufficient for your longest event duration.
 #' @param summate Logical scalar; if `TRUE` (default), the HRF response amplitude scales
 #'   with the duration of sustained events (via internal convolution/summation). If `FALSE`,
 #'   the response reflects the peak HRF reached during the event duration.
-#'   
-#' @details 
-#' This function serves as the main public interface for creating regressor objects. 
-#' Internally, it utilizes the `Reg()` constructor which performs validation and 
-#' efficient storage. The resulting object can be evaluated at specific time points 
+#'
+#' @details
+#' This function serves as the main public interface for creating regressor objects.
+#' Internally, it utilizes the `Reg()` constructor which performs validation and
+#' efficient storage. The resulting object can be evaluated at specific time points
 #' using the `evaluate()` function.
-#' 
+#'
 #' Events with an amplitude of 0 are automatically filtered out.
-#' 
+#'
+#' ## Trial-Varying HRFs
+#'
+#' When `hrf` is a list of HRF objects, each event can have its own HRF. This is
+#' useful for trial-wise analyses where different events may have different
+#' temporal characteristics (e.g., different boxcar windows, different weights).
+#' The list must have either length 1 (recycled to all events) or length equal
+#' to the number of onsets.
+#'
 #' @return An S3 object of class `Reg` and `list`
 #'   containing processed event information and the HRF specification. The
 #'   object includes a `filtered_all` attribute indicating whether all events
-#'   were removed due to zero or `NA` amplitudes.
+#'   were removed due to zero or `NA` amplitudes, and an `hrf_is_list` attribute
+#'   indicating whether trial-varying HRFs are used.
 #' @examples
 #' # Create a simple regressor with 3 events
 #' reg <- regressor(onsets = c(10, 30, 50), hrf = HRF_SPMG1)
@@ -154,6 +205,14 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
 #' # Evaluate regressor at specific time points
 #' times <- seq(0, 60, by = 0.1)
 #' response <- evaluate(reg, times)
+#'
+#' # Trial-varying HRFs: different boxcar windows for each event
+#' hrf1 <- hrf_boxcar(width = 4, normalize = TRUE)
+#' hrf2 <- hrf_boxcar(width = 6, normalize = TRUE)
+#' reg_varying <- regressor(
+#'   onsets = c(10, 30),
+#'   hrf = list(hrf1, hrf2)
+#' )
 #' @importFrom assertthat assert_that
 #' @export
 regressor <- Reg # Assign Reg directly to regressor

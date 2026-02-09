@@ -20,3 +20,9 @@ No return value, called for side effects (prints to console)
 \description{
 Provides a concise summary of the regressor object using the cli package.
 }
+\examples{
+r <- regressor(onsets = c(1, 10, 20), hrf = HRF_SPMG1,
+               duration = 0, amplitude = 1,
+               span = 40)
+print(r)
+}

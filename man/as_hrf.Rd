@@ -21,20 +21,27 @@ as_hrf(
 
 \item{span}{The nominal time span (duration in seconds) of the HRF. Must be positive. Defaults to 24.}
 
-\item{params}{A named list of parameters associated with the HRF function `f`. Defaults to an empty list.}
+\item{params}{A named list of parameters associated with the HRF function `f`. When provided,
+`as_hrf` creates a closure that captures these parameters. Defaults to an empty list.}
 }
 \value{
 A new HRF object.
 }
 \description{
 This is the core constructor for creating HRF objects in the refactored system.
-It takes a function `f(t)` and attaches standard HRF attributes.
+It takes a function `f(t)` and attaches standard HRF attributes. If `params` are
+provided, `as_hrf` creates a closure that captures these parameters, ensuring they
+are used during evaluation rather than relying on the function's defaults.
 }
 \examples{
 # Create a custom HRF from a function
-custom_hrf <- as_hrf(function(t) exp(-t/5), 
-                     name = "exponential", 
+custom_hrf <- as_hrf(function(t) exp(-t/5),
+                     name = "exponential",
                      span = 20)
 evaluate(custom_hrf, seq(0, 10, by = 1))
+
+# Create HRF with specific parameters (closure captures them)
+gamma_hrf <- as_hrf(hrf_gamma, params = list(shape = 8, rate = 1.2))
+evaluate(gamma_hrf, seq(0, 20, by = 1))
 }
 \keyword{internal}

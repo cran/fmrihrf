@@ -1,20 +1,27 @@
 #' Turn any function into an HRF object
 #'
 #' This is the core constructor for creating HRF objects in the refactored system.
-#' It takes a function `f(t)` and attaches standard HRF attributes.
+#' It takes a function `f(t)` and attaches standard HRF attributes. If `params` are
+#' provided, `as_hrf` creates a closure that captures these parameters, ensuring they
+#' are used during evaluation rather than relying on the function's defaults.
 #'
 #' @param f The function to be turned into an HRF object. It must accept a single argument `t` (time).
 #' @param name The name for the HRF object. Defaults to the deparsed name of `f`.
 #' @param nbasis The number of basis functions represented by `f`. Must be \code{>= 1}. Defaults to 1L.
 #' @param span The nominal time span (duration in seconds) of the HRF. Must be positive. Defaults to 24.
-#' @param params A named list of parameters associated with the HRF function `f`. Defaults to an empty list.
+#' @param params A named list of parameters associated with the HRF function `f`. When provided,
+#'   `as_hrf` creates a closure that captures these parameters. Defaults to an empty list.
 #' @return A new HRF object.
 #' @examples
 #' # Create a custom HRF from a function
-#' custom_hrf <- as_hrf(function(t) exp(-t/5), 
-#'                      name = "exponential", 
+#' custom_hrf <- as_hrf(function(t) exp(-t/5),
+#'                      name = "exponential",
 #'                      span = 20)
 #' evaluate(custom_hrf, seq(0, 10, by = 1))
+#'
+#' # Create HRF with specific parameters (closure captures them)
+#' gamma_hrf <- as_hrf(hrf_gamma, params = list(shape = 8, rate = 1.2))
+#' evaluate(gamma_hrf, seq(0, 20, by = 1))
 #' @keywords internal
 #' @export
 as_hrf <- function(f, name = deparse(substitute(f)), nbasis = 1L, span = 24,
@@ -26,6 +33,42 @@ as_hrf <- function(f, name = deparse(substitute(f)), nbasis = 1L, span = 24,
   assertthat::assert_that(is.numeric(span), length(span) == 1)
   assertthat::assert_that(span > 0, msg = "span must be > 0")
   assertthat::assert_that(is.list(params))
+
+  # If params are provided, create a closure that captures them
+  if (length(params) > 0) {
+    # Validate that f accepts the provided parameters
+    f_formals <- names(formals(f))
+    param_names <- names(params)
+
+    # Params starting with '.' are metadata (e.g., .lag, .width from decorators)
+    # and should not be validated as function arguments
+    metadata_params <- param_names[startsWith(param_names, ".")]
+    callable_params <- param_names[!startsWith(param_names, ".")]
+
+    # Check if callable param names are valid arguments to f (excluding 't')
+    # 't' is special and should not be in params
+    invalid_params <- setdiff(callable_params, f_formals)
+    if (length(invalid_params) > 0) {
+      warning(sprintf("Parameters %s are not arguments to function %s and will be ignored",
+                      paste(invalid_params, collapse = ", "), name),
+              call. = FALSE)
+      # Keep metadata params, filter out invalid callable params
+      params <- params[param_names %in% c(f_formals, metadata_params)]
+    }
+
+    # Separate callable params (to be passed to function) from metadata (just stored)
+    callable_params_list <- params[!startsWith(names(params), ".")]
+
+    # Create closure that captures parameters if any callable params remain
+    if (length(callable_params_list) > 0) {
+      # Capture the original function in a local variable to avoid recursion issues
+      orig_f <- f
+      # Create a closure that calls the original function with captured callable parameters only
+      f <- function(t) {
+        do.call(orig_f, c(list(t = t), callable_params_list))
+      }
+    }
+  }
 
   structure(
     f,
@@ -607,11 +650,7 @@ list_available_hrfs <- function(details = FALSE) {
 #' }
 #' 
 #' @param t Numeric vector of time points (in seconds) at which to evaluate the HRF
-#' @param P1,P2 Shape parameters for SPM canonical HRF (default: P1=5, P2=15)
-#' @param A1 Amplitude parameter for SPM canonical HRF (default: 0.0833)
-#' @param shape,rate Parameters for gamma distribution HRF (default: shape=6, rate=1)
-#' @param mean,sd Parameters for Gaussian HRF (default: mean=6, sd=2)
-#' 
+#'
 #' @return 
 #' When called as functions, return numeric vectors or matrices of HRF values.
 #' When used as objects, they are HRF objects with class \code{c("HRF", "function")}.
@@ -757,13 +796,34 @@ hrf_bspline_generator <- function(nbasis=5, span=24) {
 
   obj <- as_hrf(
     f = f_bspline,
-    name = "bspline", nbasis = as.integer(effective_nbasis), span = span,
-    params = list(nbasis = effective_nbasis, degree = degree, span = span)
+    name = "bspline", nbasis = as.integer(effective_nbasis), span = span
   )
+  # Store params as metadata (the closure already captured these values)
+  attr(obj, "params") <- list(nbasis = effective_nbasis, degree = degree, span = span)
+  attr(obj, "param_names") <- c("nbasis", "degree", "span")
   class(obj) <- c("BSpline_HRF", class(obj))
   obj
 }
 
+#' Create Tent HRF Basis Set
+#'
+#' Generates an HRF object using tent (piecewise linear) basis functions with
+#' custom parameters. This generator mirrors \code{HRF_TENT} but allows callers
+#' to control the number of basis elements and temporal span.
+#'
+#' @param nbasis Number of tent basis functions (default: 5)
+#' @param span Temporal window in seconds (default: 24)
+#' @return An HRF object of class \code{c("Tent_HRF", "HRF", "function")}
+#' @seealso \code{\link{HRF_objects}} for pre-defined HRF objects,
+#'   \code{\link{getHRF}} for a unified interface to create HRFs,
+#'   \code{\link{hrf_bspline_generator}} for a smoother alternative
+#' @examples
+#' # Create a tent basis with 6 functions over a 20 second window
+#' custom_tent <- hrf_tent_generator(nbasis = 6, span = 20)
+#' t <- seq(0, 20, by = 0.1)
+#' response <- evaluate(custom_tent, t)
+#' matplot(t, response, type = "l", main = "Tent HRF with 6 basis functions")
+#' @export
 hrf_tent_generator <- function(nbasis=5, span=24) {
   obj <- as_hrf(
     f = function(t) hrf_bspline(t, span=span, N=nbasis, degree=1),
@@ -899,9 +959,11 @@ hrf_fir_generator <- function(nbasis = 12, span = 24) {
     f = f_fir,
     name = "fir",
     nbasis = nbasis,
-    span = span,
-    params = list(nbasis = nbasis, span = span, bin_width = bin_width)
+    span = span
   )
+  # Store params as metadata (the closure already captured these values)
+  attr(obj, "params") <- list(nbasis = nbasis, span = span, bin_width = bin_width)
+  attr(obj, "param_names") <- c("nbasis", "span", "bin_width")
   class(obj) <- c("FIR_HRF", class(obj))
   obj
 }
@@ -1101,32 +1163,281 @@ evaluate.HRF <- function(x, grid, amplitude = 1, duration = 0,
 
 #' Plot an HRF Object
 #'
+#' Creates a visualization of an HRF object. For single-basis HRFs, shows the
+#' response curve with peak annotation. For multi-basis HRFs (e.g., HRF_SPMG3),
+#' shows all basis functions on the same plot.
+#'
 #' @param x An HRF object
-#' @param ... Additional arguments passed to plotting functions
-#' @return No return value, called for side effects (creates a plot)
+#' @param time Numeric vector of time points. If NULL (default), uses
+#'   seq(0, span, by = 0.1) where span is the HRF's span attribute.
+#' @param normalize Logical; if TRUE, normalize responses to peak at 1.
+#'   Default is FALSE.
+#' @param show_peak Logical; if TRUE (default for single-basis HRFs), annotate
+#'   the peak time and amplitude on the plot.
+#' @param ... Additional arguments passed to underlying plot functions.
+#' @return Invisibly returns a data frame with the time and response values
+#'   (useful for further customization).
 #' @examples
-#' # Plot an HRF
-#' hrf <- HRF_SPMG1
-#' plot(hrf)
+#' # Plot single-basis HRF
+#' plot(HRF_SPMG1)
+#'
+#' # Plot multi-basis HRF
+#' plot(HRF_SPMG3)
+#'
+#' # Plot with normalization
+#' plot(HRF_GAMMA, normalize = TRUE)
+#'
+#' # Custom time range
+#' plot(HRF_SPMG1, time = seq(0, 30, by = 0.5))
 #' @method plot HRF
 #' @export
-plot.HRF <- function(x, ...) {
-  t <- seq(0, attr(x, "span"), by = 0.1)
-  y <- evaluate(x, t)
-  
-  if (is.matrix(y)) {
-    graphics::matplot(t, y, type = "l", xlab = "Time (s)", ylab = "Response", 
-                      main = attr(x, "name"), ...)
-    # Simple legend
-    graphics::legend("topright", paste("Basis", 1:ncol(y)), lty = 1)
-  } else {
-    graphics::plot(t, y, type = "l", xlab = "Time (s)", ylab = "Response", 
-                   main = attr(x, "name"), ...)
-    peak_idx <- which.max(y)
-    graphics::points(t[peak_idx], y[peak_idx], pch = 19, col = "red")
-    graphics::text(t[peak_idx], y[peak_idx], sprintf("Peak: %.1fs", t[peak_idx]), 
-                   pos = 3, offset = 0.5)
+plot.HRF <- function(x, time = NULL, normalize = FALSE, show_peak = TRUE, ...) {
+  span <- attr(x, "span") %||% 24
+  if (is.null(time)) {
+    time <- seq(0, span, by = 0.1)
   }
+
+  y <- evaluate(x, time, normalize = normalize)
+  hrf_name <- attr(x, "name") %||% "HRF"
+
+  if (is.matrix(y)) {
+    # Multi-basis HRF
+    graphics::matplot(time, y, type = "l", lwd = 1.5, lty = 1,
+                      xlab = "Time (s)", ylab = "Response",
+                      main = hrf_name, ...)
+    nb <- ncol(y)
+    graphics::legend("topright", paste("Basis", 1:nb),
+                     col = 1:nb, lty = 1, lwd = 1.5, bty = "n")
+  } else {
+    # Single-basis HRF
+    graphics::plot(time, y, type = "l", lwd = 1.5,
+                   xlab = "Time (s)", ylab = "Response",
+                   main = hrf_name, ...)
+    if (show_peak && length(y) > 0) {
+      peak_idx <- which.max(y)
+      graphics::points(time[peak_idx], y[peak_idx], pch = 19, col = "red")
+      graphics::text(time[peak_idx], y[peak_idx],
+                     sprintf("Peak: %.1fs", time[peak_idx]),
+                     pos = 3, offset = 0.5, col = "red")
+    }
+  }
+
+  # Return data invisibly for further use
+  if (is.matrix(y)) {
+    df <- data.frame(time = time, y)
+    colnames(df)[-1] <- paste0("basis_", 1:ncol(y))
+  } else {
+    df <- data.frame(time = time, response = y)
+  }
+  invisible(df)
+}
+
+#' Compare Multiple HRF Functions
+#'
+#' Creates a comparison plot of multiple HRF objects. This function provides
+#' a convenient way to visualize different HRFs on the same plot, with options
+#' for normalization and customization. Uses ggplot2 if available for
+#' publication-quality figures, otherwise falls back to base R graphics.
+#'
+#' @param ... HRF objects to compare. Can be passed as individual arguments
+#'   or as a named list.
+#' @param time Numeric vector of time points. If NULL (default), uses
+#'   seq(0, max_span, by = 0.1) where max_span is the maximum span across
+#'   all HRFs.
+#' @param normalize Logical; if TRUE, normalize all HRFs to peak at 1.
+#'   Useful for comparing shapes regardless of amplitude. Default is FALSE.
+#' @param labels Character vector of labels for each HRF. If NULL (default),
+#'   uses the 'name' attribute of each HRF, or "HRF_1", "HRF_2", etc.
+#' @param title Character string for the plot title. If NULL (default),
+#'   uses "HRF Comparison".
+#' @param subtitle Character string for the plot subtitle. If NULL (default),
+#'   no subtitle is shown.
+#' @param use_ggplot Logical; if TRUE and ggplot2 is available, use ggplot2
+#'   for plotting. If FALSE, use base R graphics. Default is TRUE.
+#' @return Invisibly returns a data frame in long format with columns 'time',
+#'   'HRF', and 'response'. If use_ggplot is TRUE and ggplot2 is available,
+#'   also returns a ggplot object as an attribute 'plot'.
+#' @examples
+#' # Compare canonical HRFs
+#' plot_hrfs(HRF_SPMG1, HRF_GAMMA, HRF_GAUSSIAN)
+#'
+#' # Compare with custom labels
+#' plot_hrfs(HRF_SPMG1, HRF_GAMMA,
+#'           labels = c("SPM Canonical", "Gamma"))
+#'
+#' # Normalize for shape comparison
+#' plot_hrfs(HRF_SPMG1, HRF_GAMMA, HRF_GAUSSIAN,
+#'           normalize = TRUE,
+#'           title = "HRF Shape Comparison",
+#'           subtitle = "All HRFs normalized to peak at 1")
+#'
+#' # Compare blocked HRFs with different durations
+#' hrf_1s <- block_hrf(HRF_SPMG1, width = 1)
+#' hrf_3s <- block_hrf(HRF_SPMG1, width = 3)
+#' hrf_5s <- block_hrf(HRF_SPMG1, width = 5)
+#' plot_hrfs(hrf_1s, hrf_3s, hrf_5s,
+#'           labels = c("1s duration", "3s duration", "5s duration"),
+#'           title = "Effect of Event Duration on HRF")
+#'
+#' # Use base R graphics instead of ggplot2
+#' plot_hrfs(HRF_SPMG1, HRF_GAMMA, use_ggplot = FALSE)
+#' @export
+plot_hrfs <- function(..., time = NULL, normalize = FALSE, labels = NULL,
+                      title = NULL, subtitle = NULL, use_ggplot = TRUE) {
+  # Collect HRF objects
+  hrfs <- list(...)
+
+  # Handle case where a single list is passed
+
+if (length(hrfs) == 1 && is.list(hrfs[[1]]) && !inherits(hrfs[[1]], "HRF")) {
+    hrfs <- hrfs[[1]]
+  }
+
+  n_hrfs <- length(hrfs)
+  if (n_hrfs == 0) {
+    stop("At least one HRF object must be provided")
+  }
+
+  # Validate all inputs are HRF objects
+  for (i in seq_along(hrfs)) {
+    if (!inherits(hrfs[[i]], "HRF")) {
+      stop("All arguments must be HRF objects. Argument ", i, " is not an HRF.")
+    }
+  }
+
+  # Determine time points
+  if (is.null(time)) {
+    spans <- sapply(hrfs, function(h) attr(h, "span") %||% 24)
+    max_span <- max(spans)
+    time <- seq(0, max_span, by = 0.1)
+  }
+
+  # Generate labels
+  if (is.null(labels)) {
+    labels <- sapply(hrfs, function(h) attr(h, "name") %||% "HRF")
+    # Make unique if needed
+    if (any(duplicated(labels))) {
+      labels <- paste0(labels, "_", seq_along(labels))
+    }
+  }
+  if (length(labels) != n_hrfs) {
+    stop("Length of 'labels' must match number of HRFs")
+  }
+
+  # Evaluate all HRFs
+  responses <- lapply(hrfs, function(h) {
+    y <- evaluate(h, time, normalize = normalize)
+    # For multi-basis HRFs, take the first basis (canonical)
+    if (is.matrix(y)) {
+      y[, 1]
+    } else {
+      y
+    }
+  })
+
+  # Build data frame
+  df_list <- lapply(seq_along(responses), function(i) {
+    data.frame(time = time, HRF = labels[i], response = responses[[i]])
+  })
+  df <- do.call(rbind, df_list)
+  df$HRF <- factor(df$HRF, levels = labels)  # Preserve order
+
+  # Set default title
+  if (is.null(title)) {
+    title <- "HRF Comparison"
+  }
+
+  # Plot
+  has_ggplot <- requireNamespace("ggplot2", quietly = TRUE)
+
+  if (use_ggplot && has_ggplot) {
+    # ggplot2 version - use aes() with unquoted names (standard NSE)
+    # Note: using aes_string() is deprecated, but direct aes() with unquoted
+    # column names works fine when the columns exist in the data
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = time, y = response, color = HRF)) +
+      ggplot2::geom_line(linewidth = 1) +
+      ggplot2::labs(
+        title = title,
+        subtitle = subtitle,
+        x = "Time (seconds)",
+        y = if (normalize) "Response (normalized)" else "Response",
+        color = "HRF"
+      ) +
+      ggplot2::theme_minimal()
+
+    print(p)
+    attr(df, "plot") <- p
+  } else {
+    # Base R version
+    colors <- grDevices::rainbow(n_hrfs)
+    y_range <- range(df$response, na.rm = TRUE)
+
+    graphics::plot(NULL, xlim = range(time), ylim = y_range,
+                   xlab = "Time (seconds)",
+                   ylab = if (normalize) "Response (normalized)" else "Response",
+                   main = title)
+    if (!is.null(subtitle)) {
+      graphics::mtext(subtitle, side = 3, line = 0.5, cex = 0.8)
+    }
+
+    for (i in seq_along(responses)) {
+      graphics::lines(time, responses[[i]], col = colors[i], lwd = 1.5)
+    }
+
+    graphics::legend("topright", legend = labels, col = colors, lty = 1,
+                     lwd = 1.5, bty = "n")
+  }
+
+  invisible(df)
+}
+
+#' Print an HRF Object
+#'
+#' Displays a concise summary of an HRF object including its name, number of basis
+#' functions, temporal span, and parameters (if any).
+#'
+#' @param x An HRF object
+#' @param ... Additional arguments (unused)
+#' @return Invisibly returns the HRF object
+#' @examples
+#' # Print canonical HRF
+#' print(HRF_SPMG1)
+#'
+#' # Print multi-basis HRF
+#' print(HRF_SPMG3)
+#'
+#' # Print Gaussian HRF
+#' print(HRF_GAUSSIAN)
+#' @method print HRF
+#' @export
+print.HRF <- function(x, ...) {
+  hrf_name <- attr(x, "name") %||% "unnamed"
+  nb <- attr(x, "nbasis") %||% 1L
+  span <- attr(x, "span") %||% NA
+  params <- attr(x, "params")
+  param_names <- attr(x, "param_names")
+
+  # Use cat() for reliable output in all contexts (including knitr/vignettes)
+  cat("-- HRF:", hrf_name, paste(rep("-", max(1, 50 - nchar(hrf_name))), collapse = ""), "\n")
+  cat("   Basis functions:", nb, "\n")
+  if (!is.na(span)) {
+    cat("   Span:", span, "s\n")
+  }
+
+  # Show parameters if they exist
+  if (!is.null(params) && length(params) > 0) {
+    param_str <- paste(
+      names(params),
+      sapply(params, function(p) format(p, digits = 4)),
+      sep = " = ",
+      collapse = ", "
+    )
+    cat("   Parameters:", param_str, "\n")
+  } else if (!is.null(param_names) && length(param_names) > 0) {
+    cat("   Parameter names:", paste(param_names, collapse = ", "), "\n")
+  }
+
+  invisible(x)
 }
 
 # Create pre-defined HRF objects using generators -----

@@ -357,16 +357,17 @@ design_mat <- regressor_design(
 print(dim(design_mat)) # Total time points across both blocks x 2 conditions
 
 # Convert to data frame for plotting
-time_points <- samples(sframe)
+# Use global=TRUE to get continuous time across blocks
+time_points <- samples(sframe, global = TRUE)
 design_plot_df <- as.data.frame(design_mat)
 names(design_plot_df) <- c("Faces", "Houses")
 design_plot_df$Time <- time_points
 design_plot_df$Block <- rep(1:2, each = 120) # 120 scans per block
 
-design_plot_long <- pivot_longer(design_plot_df, c("Faces", "Houses"), 
+design_plot_long <- pivot_longer(design_plot_df, c("Faces", "Houses"),
                                 names_to = "Condition", values_to = "Response")
 
-# Plot with block separation
+# Plot with block separation (block boundary at 240 seconds)
 ggplot(design_plot_long, aes(x = Time, y = Response, color = Condition)) +
   geom_line(linewidth = 1) +
   geom_vline(xintercept = 240, linetype = "dashed", alpha = 0.7) +

@@ -26,6 +26,7 @@ hrf_mexhat_vals <- hrf_mexhat(seq(0, 20, by = .5), mean = 6, sd = 2)
 \seealso{
 Other hrf_functions: 
 \code{\link{hrf_basis_lwu}()},
+\code{\link{hrf_boxcar}()},
 \code{\link{hrf_bspline}()},
 \code{\link{hrf_gamma}()},
 \code{\link{hrf_gaussian}()},
@@ -33,6 +34,7 @@ Other hrf_functions:
 \code{\link{hrf_lwu}()},
 \code{\link{hrf_sine}()},
 \code{\link{hrf_spmg1}()},
-\code{\link{hrf_time}()}
+\code{\link{hrf_time}()},
+\code{\link{hrf_weighted}()}
 }
 \concept{hrf_functions}

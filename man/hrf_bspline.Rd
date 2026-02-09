@@ -30,6 +30,7 @@ hrfb <- hrf_bspline(seq(0, 20, by = .5), N = 4, degree = 2)
 \seealso{
 Other hrf_functions: 
 \code{\link{hrf_basis_lwu}()},
+\code{\link{hrf_boxcar}()},
 \code{\link{hrf_gamma}()},
 \code{\link{hrf_gaussian}()},
 \code{\link{hrf_inv_logit}()},
@@ -37,6 +38,7 @@ Other hrf_functions:
 \code{\link{hrf_mexhat}()},
 \code{\link{hrf_sine}()},
 \code{\link{hrf_spmg1}()},
-\code{\link{hrf_time}()}
+\code{\link{hrf_time}()},
+\code{\link{hrf_weighted}()}
 }
 \concept{hrf_functions}

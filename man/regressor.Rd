@@ -17,20 +17,27 @@ regressor(
 \item{onsets}{A numeric vector of event onset times in seconds.}
 
 \item{hrf}{The hemodynamic response function (HRF) to convolve with the events.
-This can be a pre-defined `HRF` object (e.g., `HRF_SPMG1`), a custom `HRF` 
-object created with `as_hrf`, a function `f(t)`, or a character string 
-referring to a known HRF type (e.g., "spmg1", "gaussian"). Defaults to `HRF_SPMG1`.}
+This can be:
+\itemize{
+  \item A pre-defined `HRF` object (e.g., `HRF_SPMG1`)
+  \item A custom `HRF` object created with `as_hrf`
+  \item A function `f(t)`
+  \item A character string referring to a known HRF type (e.g., "spmg1", "gaussian")
+  \item A **list of HRF objects** for trial-varying HRFs (one per event, or length 1 to recycle)
+}
+Defaults to `HRF_SPMG1`.}
 
-\item{duration}{A numeric scalar or vector specifying the duration of each event 
+\item{duration}{A numeric scalar or vector specifying the duration of each event
 in seconds. If scalar, it's applied to all events. Defaults to 0 (impulse events).}
 
-\item{amplitude}{A numeric scalar or vector specifying the amplitude (scaling factor) 
+\item{amplitude}{A numeric scalar or vector specifying the amplitude (scaling factor)
 for each event. If scalar, it's applied to all events. Defaults to 1.}
 
-\item{span}{The temporal window (in seconds) over which the HRF is defined 
-or evaluated. This influences the length of the convolution. If not provided, 
-it may be inferred from the `hrf` object or default to 40s. **Note:** Unlike some
-previous versions, the `span` is not automatically adjusted based on `duration`;
+\item{span}{The temporal window (in seconds) over which the HRF is defined
+or evaluated. This influences the length of the convolution. If not provided,
+it may be inferred from the `hrf` object or default to 40s. For list HRFs,
+the maximum span across all HRFs is used. **Note:** Unlike some previous
+versions, the `span` is not automatically adjusted based on `duration`;
 ensure the provided or inferred `span` is sufficient for your longest event duration.}
 
 \item{summate}{Logical scalar; if `TRUE` (default), the HRF response amplitude scales
@@ -41,20 +48,29 @@ the response reflects the peak HRF reached during the event duration.}
 An S3 object of class `Reg` and `list`
   containing processed event information and the HRF specification. The
   object includes a `filtered_all` attribute indicating whether all events
-  were removed due to zero or `NA` amplitudes.
+  were removed due to zero or `NA` amplitudes, and an `hrf_is_list` attribute
+  indicating whether trial-varying HRFs are used.
 }
 \description{
 Creates an object representing event-related regressors for fMRI modeling.
-This function defines event onsets and associates them with a hemodynamic 
+This function defines event onsets and associates them with a hemodynamic
 response function (HRF) to generate predicted time courses.
 }
 \details{
-This function serves as the main public interface for creating regressor objects. 
-Internally, it utilizes the `Reg()` constructor which performs validation and 
-efficient storage. The resulting object can be evaluated at specific time points 
+This function serves as the main public interface for creating regressor objects.
+Internally, it utilizes the `Reg()` constructor which performs validation and
+efficient storage. The resulting object can be evaluated at specific time points
 using the `evaluate()` function.
 
 Events with an amplitude of 0 are automatically filtered out.
+
+## Trial-Varying HRFs
+
+When `hrf` is a list of HRF objects, each event can have its own HRF. This is
+useful for trial-wise analyses where different events may have different
+temporal characteristics (e.g., different boxcar windows, different weights).
+The list must have either length 1 (recycled to all events) or length equal
+to the number of onsets.
 }
 \examples{
 # Create a simple regressor with 3 events
@@ -74,4 +90,12 @@ reg_gamma <- regressor(onsets = c(10, 30), hrf = "gamma")
 # Evaluate regressor at specific time points
 times <- seq(0, 60, by = 0.1)
 response <- evaluate(reg, times)
+
+# Trial-varying HRFs: different boxcar windows for each event
+hrf1 <- hrf_boxcar(width = 4, normalize = TRUE)
+hrf2 <- hrf_boxcar(width = 6, normalize = TRUE)
+reg_varying <- regressor(
+  onsets = c(10, 30),
+  hrf = list(hrf1, hrf2)
+)
 }

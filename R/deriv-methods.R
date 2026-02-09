@@ -8,6 +8,9 @@
 #' @param ... Additional arguments (currently unused)
 #' @return Numeric vector or matrix of derivative values
 #' @importFrom numDeriv grad
+#' @examples
+#' t <- seq(0, 30, by = 0.5)
+#' d <- deriv(HRF_SPMG1, t)
 #' @export
 #' @method deriv HRF
 deriv.HRF <- function(x, t, ...) {
@@ -68,6 +71,7 @@ deriv.HRF <- function(x, t, ...) {
 #' @param t Numeric vector of time points at which to evaluate the derivative
 #' @param ... Additional arguments (currently unused)
 #' @return Numeric vector of derivative values
+#' @rdname deriv.HRF
 #' @export
 #' @method deriv SPMG1_HRF
 deriv.SPMG1_HRF <- function(x, t, ...) {
@@ -93,6 +97,7 @@ deriv.SPMG1_HRF <- function(x, t, ...) {
 #' @param t Numeric vector of time points at which to evaluate the derivative
 #' @param ... Additional arguments (currently unused)
 #' @return Matrix with 2 columns of derivative values
+#' @rdname deriv.HRF
 #' @export
 #' @method deriv SPMG2_HRF
 deriv.SPMG2_HRF <- function(x, t, ...) {
@@ -131,6 +136,7 @@ deriv.SPMG2_HRF <- function(x, t, ...) {
 #' @param t Numeric vector of time points at which to evaluate the derivative
 #' @param ... Additional arguments (currently unused)
 #' @return Matrix with 3 columns of derivative values
+#' @rdname deriv.HRF
 #' @export
 #' @method deriv SPMG3_HRF
 deriv.SPMG3_HRF <- function(x, t, ...) {

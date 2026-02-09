@@ -281,8 +281,9 @@ hrf_inv_logit <- function(t, mu1 = 6, s1 = 1, mu2 = 16, s2 = 1, lag = 0) {
 #' # Modified shape with undershoot
 #' hrf_under <- hrf_half_cosine(t, h1 = 1, h2 = 4, h3 = 6, h4 = 8, f2 = -0.2)
 #' lines(t, hrf_under, col = "red")
-#' @export
-hrf_half_cosine <- function(t, h1=1, h2=5, h3=7,h4=7, f1=0, f2=0) {
+#' @keywords internal
+#' @noRd
+.hrf_half_cosine <- function(t, h1=1, h2=5, h3=7,h4=7, f1=0, f2=0) {
   rising_half_cosine <- function(t, f1, t0, w) {
     return(f1/2 * (1 - cos(pi * (t - t0) / w)))
   }
@@ -300,6 +301,44 @@ hrf_half_cosine <- function(t, h1=1, h2=5, h3=7,h4=7, f1=0, f2=0) {
     (t > h1+h2+h3+h4) ~ f2,
   )
   return(ret)
+}
+
+#' Half-cosine HRF 
+#'
+#' Segments: 0->f1 (h1), f1->1 (h2), 1->f2 (h3), f2->0 (h4).
+#' Negative f1 gives an initial dip; negative f2 gives an undershoot.
+#' Peak is at t = h1 + h2 (amplitude 1 by construction).
+#'
+#' @param t Numeric vector of times (s)
+#' @param h1,h2,h3,h4 Segment durations (s). Must be > 0.
+#' @param f1 Initial dip level (default 0), typically in [-0.2, 0]
+#' @param f2 Undershoot level (default 0), typically in [-0.3, 0]
+#' @return Numeric vector same length as t
+#' @examples
+#' t <- seq(0, 30, by = 0.1)
+#' y <- hrf_half_cosine(t)
+#' @export
+hrf_half_cosine <- function(t, h1=1, h2=5, h3=7, h4=7, f1=0, f2=0) {
+  stopifnot(h1 > 0, h2 > 0, h3 > 0, h4 > 0)
+  trans <- function(tt, a, b, t0, w) a + 0.5*(b - a) * (1 - cos(pi * (tt - t0)/w))
+  t1 <- h1; t2 <- h1 + h2; t3 <- h1 + h2 + h3; t4 <- t3 + h4
+
+  out <- numeric(length(t))
+  # segment 1: 0 -> f1
+  idx <- t >= 0 & t <= t1
+  out[idx] <- trans(t[idx], 0,  f1, 0,   h1)
+  # segment 2: f1 -> 1
+  idx <- t >  t1 & t <= t2
+  out[idx] <- trans(t[idx], f1, 1,  t1,  h2)
+  # segment 3: 1 -> f2 (undershoot)
+  idx <- t >  t2 & t <= t3
+  out[idx] <- trans(t[idx], 1,  f2, t2,  h3)
+  # segment 4: f2 -> 0 (recovery)
+  idx <- t >  t3 & t <= t4
+  out[idx] <- trans(t[idx], f2, 0,  t3,  h4)
+  # before/after window: 0
+  out[t < 0 | t > t4] <- 0
+  out
 }
 
 #' Fourier basis for HRF modeling
@@ -484,6 +523,258 @@ hrf_lwu <- function(t, tau = 6, sigma = 2.5, rho = 0.35, normalize = "none") {
 
   return(response)
 }
+
+
+#' Boxcar HRF (No Hemodynamic Delay)
+#'
+#' Creates a simple boxcar (step function) HRF that is constant within a time
+#' window starting at t=0 and zero outside. Unlike traditional HRFs, this has
+#' no hemodynamic delay - it represents an instantaneous response.
+#'
+#' When used in a GLM, the estimated coefficient represents a (weighted) average
+#' of the data within the specified time window. If \code{normalize = TRUE}, the
+#' coefficient directly estimates the mean signal in that window.
+#'
+#' For delayed windows (not starting at t=0), use \code{\link{lag_hrf}} to shift
+#' the boxcar in time.
+#'
+#' @section Note on durations:
+#' The \code{width} is fixed when the HRF is created. The \code{duration}
+#' parameter in \code{\link{regressor}()} does \strong{not} modify the boxcar
+#' width---it controls how long the neural input is sustained (which then gets
+#' convolved with this HRF). For trial-varying boxcar widths, use a list of HRFs:
+#' \preformatted{
+#' widths <- c(4, 6, 8)
+#' hrfs <- lapply(widths, function(w) hrf_boxcar(width = w, normalize = TRUE))
+#' reg <- regressor(onsets = c(0, 20, 40), hrf = hrfs)
+#' }
+#'
+#' @param width Duration of the boxcar window in seconds.
+#' @param amplitude Height of the boxcar (default: 1).
+#' @param normalize Logical; if \code{TRUE}, the boxcar is scaled so that its
+#'   integral equals 1 (i.e., amplitude = 1/width). This makes the regression
+#'   coefficient interpretable as the mean signal in the window.
+#'   Default is \code{FALSE}.
+#' @return An HRF object that can be used with \code{regressor()} and other
+#'   fmrihrf functions.
+#' @family hrf_functions
+#' @seealso \code{\link{hrf_weighted}} for weighted/shaped boxcars,
+#'   \code{\link{lag_hrf}} to shift the window in time
+#' @export
+#' @examples
+#' # Simple boxcar of 5 seconds width
+#' hrf1 <- hrf_boxcar(width = 5)
+#' t <- seq(-1, 10, by = 0.1)
+#' plot(t, evaluate(hrf1, t), type = "s", main = "Simple Boxcar HRF")
+#'
+#' # Normalized boxcar - coefficient will estimate mean signal in window
+#' hrf2 <- hrf_boxcar(width = 5, normalize = TRUE)
+#' # integral is now 1, so beta estimates mean(Y[0:5])
+#'
+#' # Use in a regressor with trial-varying widths
+#' hrf_short <- hrf_boxcar(width = 4, normalize = TRUE)
+#' hrf_long <- hrf_boxcar(width = 8, normalize = TRUE)
+#' reg <- regressor(onsets = c(0, 20), hrf = list(hrf_short, hrf_long))
+#'
+#' # For delayed windows, use lag_hrf decorator
+#' hrf_delayed <- lag_hrf(hrf_boxcar(width = 5), lag = 10)  # Window from 10-15s
+hrf_boxcar <- function(width, amplitude = 1, normalize = FALSE) {
+  assertthat::assert_that(
+    is.numeric(width) && length(width) == 1 && width > 0,
+    msg = "`width` must be a single positive numeric value."
+  )
+  assertthat::assert_that(
+    is.numeric(amplitude) && length(amplitude) == 1,
+    msg = "`amplitude` must be a single numeric value."
+  )
+
+  if (normalize) {
+    amplitude <- 1 / width
+  }
+
+  f <- function(t) {
+    ifelse(t >= 0 & t < width, amplitude, 0)
+  }
+
+  as_hrf(f,
+         name = sprintf("boxcar[%.2g]", width),
+         nbasis = 1L,
+         span = width,
+         params = list(width = width, amplitude = amplitude, normalize = normalize))
+}
+
+
+#' Weighted HRF (No Hemodynamic Delay)
+#'
+#' Creates a flexible weighted HRF starting at t=0 with user-specified weights.
+#' Unlike traditional HRFs, this has no built-in hemodynamic delay - it directly
+#' maps weights to time points, allowing for arbitrary temporal response shapes.
+#'
+#' This is useful for extracting weighted averages of data at specific time points.
+#' When \code{normalize = TRUE} and the HRF is used in a GLM, the estimated
+#' coefficient represents a weighted mean of the data at the specified times.
+#'
+#' There are two ways to specify the temporal structure:
+#' \enumerate{
+#'   \item \code{width + weights}: Weights are evenly spaced from 0 to \code{width}
+#'   \item \code{times + weights}: Explicit time points for each weight (relative to t=0)
+#' }
+#'
+#' For delayed windows (not starting at t=0), use \code{\link{lag_hrf}} to shift
+#' the weighted HRF in time.
+#'
+#' @section Note on durations:
+#' The temporal structure (\code{width} or \code{times}) is fixed when the HRF
+#' is created. The \code{duration} parameter in \code{\link{regressor}()} does
+#' \strong{not} modify the weighted HRF's structure---it controls how long the
+#' neural input is sustained (which then gets convolved with this HRF). For
+#' trial-varying weighted HRFs, use a list of HRFs:
+#' \preformatted{
+#' hrf_early <- hrf_weighted(width = 6, weights = c(1, 1, 0, 0), normalize = TRUE)
+#' hrf_late <- hrf_weighted(width = 6, weights = c(0, 0, 1, 1), normalize = TRUE)
+#' reg <- regressor(onsets = c(0, 20), hrf = list(hrf_early, hrf_late))
+#' }
+#'
+#' @param weights Numeric vector of weights. Required.
+#' @param width Total duration of the window in seconds. If provided without
+#'   \code{times}, weights are evenly spaced from 0 to \code{width}.
+#' @param times Numeric vector of time points (in seconds, relative to t=0) where
+#'   weights are specified. Must be strictly increasing and start at 0 for
+#'   consistency with other HRFs. If provided, \code{width} is ignored.
+#' @param method Interpolation method between time points:
+#'   \describe{
+#'     \item{"constant"}{Step function - weight is constant until the next time
+#'       point (default). Good for discrete time bins.
+#'     }
+#'     \item{"linear"}{Linear interpolation between points. Good for smooth
+#'       weight transitions.
+#'     }
+#'   }
+#' @param normalize Logical; if \code{TRUE}, weights are scaled so they sum to 1
+#'   (for \code{method = "constant"}) or integrate to 1 (for \code{method = "linear"}).
+#'   This makes the regression coefficient interpretable as a weighted mean.
+#'   Default is \code{FALSE}.
+#' @return An HRF object that can be used with \code{regressor()} and other
+#'   fmrihrf functions.
+#' @family hrf_functions
+#' @seealso \code{\link{hrf_boxcar}} for simple uniform boxcars,
+#'   \code{\link{lag_hrf}} to shift the window in time,
+#'   \code{\link{empirical_hrf}} for HRFs from measured data
+#' @export
+#' @examples
+#' # Simple: 6s window with 4 evenly-spaced weights (at 0, 2, 4, 6s)
+#' hrf1 <- hrf_weighted(width = 6, weights = c(0.2, 0.5, 0.8, 0.3))
+#' t <- seq(-1, 10, by = 0.1)
+#' plot(t, evaluate(hrf1, t), type = "s", main = "Weighted HRF (width + weights)")
+#'
+#' # Explicit times for precise control
+#' hrf2 <- hrf_weighted(
+#'   times = c(0, 1, 3, 5, 6),
+#'   weights = c(0.1, 0.5, 0.8, 0.5, 0.1),
+#'   method = "linear"
+#' )
+#' plot(t, evaluate(hrf2, t), type = "l", main = "Smooth Weighted HRF")
+#'
+#' # Normalized weights - coefficient estimates weighted mean of signal
+#' hrf3 <- hrf_weighted(
+#'   width = 8,
+#'   weights = c(1, 2, 2, 1),
+#'   normalize = TRUE
+#' )
+#'
+#' # Trial-varying weighted HRFs
+#' hrf_early <- hrf_weighted(width = 6, weights = c(1, 1, 0, 0), normalize = TRUE)
+#' hrf_late <- hrf_weighted(width = 6, weights = c(0, 0, 1, 1), normalize = TRUE)
+#' reg <- regressor(onsets = c(0, 20), hrf = list(hrf_early, hrf_late))
+#'
+#' # For delayed windows, use lag_hrf
+#' hrf_delayed <- lag_hrf(hrf_weighted(width = 5, weights = c(1, 2, 1)), lag = 10)
+hrf_weighted <- function(weights, width = NULL, times = NULL,
+                         method = c("constant", "linear"), normalize = FALSE) {
+  method <- match.arg(method)
+
+  assertthat::assert_that(
+    is.numeric(weights) && length(weights) >= 2,
+    msg = "`weights` must be a numeric vector with at least 2 elements."
+  )
+
+  # Determine times: explicit times take precedence, otherwise generate from width
+ if (!is.null(times)) {
+    assertthat::assert_that(
+      is.numeric(times) && length(times) >= 2,
+      msg = "`times` must be a numeric vector with at least 2 elements."
+    )
+    assertthat::assert_that(
+      length(times) == length(weights),
+      msg = "`times` and `weights` must have the same length."
+    )
+    assertthat::assert_that(
+      all(diff(times) > 0),
+      msg = "`times` must be strictly increasing."
+    )
+    assertthat::assert_that(
+      times[1] >= 0,
+      msg = "`times` must start at 0 or later (HRFs are relative to event onset)."
+    )
+  } else if (!is.null(width)) {
+    assertthat::assert_that(
+      is.numeric(width) && length(width) == 1 && width > 0,
+      msg = "`width` must be a single positive numeric value."
+    )
+    # Generate evenly spaced times from 0 to width
+    n_weights <- length(weights)
+    times <- seq(0, width, length.out = n_weights)
+  } else {
+    stop("Either `width` or `times` must be provided.")
+  }
+
+  # Normalize weights if requested
+  if (normalize) {
+    if (method == "constant") {
+      # For step function, normalize so weights sum to 1
+      # (each weight applies to its interval)
+      weight_sum <- sum(weights[-length(weights)])  # last weight has no interval
+      if (abs(weight_sum) > 1e-10) {
+        # Scale all weights proportionally
+        weights <- weights / weight_sum
+      }
+    } else {
+      # For linear interpolation, normalize so integral = 1
+      # Use trapezoidal rule to estimate integral
+      intervals <- diff(times)
+      avg_weights <- (weights[-length(weights)] + weights[-1]) / 2
+      integral <- sum(intervals * avg_weights)
+      if (abs(integral) > 1e-10) {
+        weights <- weights / integral
+      }
+    }
+  }
+
+  # Create the interpolation function
+  if (method == "linear") {
+    f <- stats::approxfun(times, weights, yleft = 0, yright = 0, rule = 1)
+  } else {
+    # Piecewise constant (step function)
+    # For step function, each weight applies from times[i] to times[i+1]
+    f <- stats::approxfun(times, weights, yleft = 0, yright = 0,
+                          method = "constant", rule = 1)
+  }
+
+  # Name reflects how it was specified
+  hrf_name <- if (!is.null(width) && is.null(times)) {
+    sprintf("weighted[w=%.2g, %d wts]", max(times), length(weights))
+  } else {
+    sprintf("weighted[%d pts, %s]", length(times), method)
+  }
+
+  as_hrf(f,
+         name = hrf_name,
+         nbasis = 1L,
+         span = max(times),
+         params = list(times = times, weights = weights, width = width,
+                       method = method, normalize = normalize))
+}
+
 
 #' LWU HRF Basis for Taylor Expansion
 #'
