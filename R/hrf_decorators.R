@@ -52,7 +52,9 @@ lag_hrf <- function(hrf, lag) {
 #' @param width The width of the block in seconds.
 #' @param precision The sampling precision in seconds used for the internal convolution (default: 0.1).
 #' @param half_life The half-life of an optional exponential decay applied during the block (default: Inf, meaning no decay).
-#' @param summate Logical; if TRUE (default), the responses from each time point within the block are summed. If FALSE, the maximum response at each time point is taken.
+#' @param summate Logical; if TRUE (default), responses within the block are
+#'   integrated (summed). If FALSE, the integrated response is divided by the
+#'   total block weight so amplitude does not grow with block width.
 #' @param normalize Logical; if TRUE, the resulting blocked HRF is scaled so that its peak value is 1 (default: FALSE).
 #'
 #' @return A new HRF object representing the blocked function.
@@ -94,7 +96,10 @@ block_hrf <- function(hrf, width, precision = 0.1, half_life = Inf, summate = TR
       # If width is negligible, just return the original hrf value
       res <- hrf(t)
     } else {
-      samples <- seq(0, width, by = precision)
+      quad <- .block_offsets_weights(width, precision)
+      samples <- quad$offsets
+      weights <- quad$weights
+
       hmat_list <- lapply(samples, function(offset) {
         decay_factor <- if (is.infinite(half_life)) 1 else exp(-log(2) * offset / half_life)
         hrf(t - offset) * decay_factor
@@ -103,17 +108,23 @@ block_hrf <- function(hrf, width, precision = 0.1, half_life = Inf, summate = TR
       # Combine results for each time point t across offsets
       if (orig_nbasis == 1) {
         hmat <- do.call(cbind, hmat_list) # Matrix with rows=time, cols=offsets
-        res <- if (summate) {
-          rowSums(hmat)
-        } else {
-          apply(hmat, 1, function(vals) vals[which.max(vals)])
+        res <- as.vector(hmat %*% weights)
+        if (!summate) {
+          # Same convolution shape but amplitude doesn't grow with duration
+          weight_sum <- sum(weights)
+          if (weight_sum > 0) {
+            res <- res / weight_sum
+          }
         }
       } else {
-         # For multi-basis, sum matrices if summate=TRUE (difficult to define max sensibly)
+         weighted_list <- Map(function(vals, wt) vals * wt, hmat_list, weights)
+         res <- Reduce("+", weighted_list)
          if (!summate) {
-           warning("'summate = FALSE' is not fully supported for multi-basis HRFs in block_hrf; returning sum.")
+           weight_sum <- sum(weights)
+           if (weight_sum > 0) {
+             res <- res / weight_sum
+           }
          }
-         res <- Reduce("+", hmat_list)
       }
     }
     
@@ -188,21 +199,31 @@ normalise_hrf <- function(hrf) {
   orig_nbasis <- nbasis(hrf)
   orig_params <- attr(hrf, "params")
 
+  # Compute normalization constants once on a fixed support grid so scaling is
+  # invariant to the specific evaluation points requested later.
+  ref_n <- max(1001L, min(20001L, as.integer(ceiling(orig_span / 0.01)) + 1L))
+  ref_grid <- seq(0, orig_span, length.out = ref_n)
+  ref_vals <- hrf(ref_grid)
+
+  if (orig_nbasis == 1) {
+    peak_val <- max(abs(as.numeric(ref_vals)), na.rm = TRUE)
+    peak_val <- if (is.na(peak_val) || peak_val == 0) 1 else peak_val
+  } else if (is.matrix(ref_vals)) {
+    peak_val <- apply(ref_vals, 2, function(basis_col) {
+      max(abs(basis_col), na.rm = TRUE)
+    })
+    peak_val[is.na(peak_val) | peak_val == 0] <- 1
+  } else {
+    peak_val <- 1
+  }
+
   # Create the normalised function
   normalised_func <- function(t) {
     res <- hrf(t)
     if (orig_nbasis == 1) {
-      peak_val <- max(abs(res), na.rm = TRUE)
-      if (!is.na(peak_val) && peak_val != 0) {
-        res <- res / peak_val
-      }
+      res <- res / peak_val
     } else if (is.matrix(res)) {
-      # Normalise each basis column independently while preserving matrix shape
-      peaks <- apply(res, 2, function(basis_col) {
-        max(abs(basis_col), na.rm = TRUE)
-      })
-      peaks_safe <- ifelse(is.na(peaks) | peaks == 0, 1, peaks)
-      res <- sweep(res, 2, peaks_safe, "/")
+      res <- sweep(res, 2, peak_val, "/")
     }
     # If it's not numeric or matrix (e.g., NULL or error result), return as is
     return(res)

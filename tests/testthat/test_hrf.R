@@ -358,7 +358,7 @@ test_that("block_hrf correctly blocks an HRF object", {
   half_life_inf <- 1e12
 
   blocked_hrf_sum <- block_hrf(base_hrf, width = width, precision = precision, half_life = half_life_inf, summate = TRUE, normalize = FALSE)
-  blocked_hrf_max <- block_hrf(base_hrf, width = width, precision = precision, half_life = half_life_inf, summate = FALSE, normalize = FALSE)
+  blocked_hrf_nosum <- block_hrf(base_hrf, width = width, precision = precision, half_life = half_life_inf, summate = FALSE, normalize = FALSE)
   blocked_hrf_norm <- block_hrf(base_hrf, width = width, precision = precision, half_life = half_life_inf, summate = TRUE, normalize = TRUE)
 
   # Test basic structure
@@ -369,20 +369,28 @@ test_that("block_hrf correctly blocks an HRF object", {
   # Note: decorator params may not be preserved after wrapping, but functionality works
   # expect_equal(attr(blocked_hrf_sum, "params")$.width, width)
   # expect_equal(attr(blocked_hrf_sum, "params")$.summate, TRUE)
-  # expect_equal(attr(blocked_hrf_max, "params")$.summate, FALSE)
+  # expect_equal(attr(blocked_hrf_nosum, "params")$.summate, FALSE)
   # expect_equal(attr(blocked_hrf_norm, "params")$.normalize, TRUE)
 
   # Test function evaluation - Compare with evaluate.HRF which uses similar logic
   eval_res_sum <- evaluate(base_hrf, t, duration = width, precision = precision, summate = TRUE, normalize = FALSE)
-  eval_res_max <- evaluate(base_hrf, t, duration = width, precision = precision, summate = FALSE, normalize = FALSE)
   eval_res_norm <- evaluate(base_hrf, t, duration = width, precision = precision, summate = TRUE, normalize = TRUE)
 
   expect_equal(blocked_hrf_sum(t), eval_res_sum)
-  # Max logic might differ slightly depending on implementation details, check if shape is reasonable
-  # expect_equal(blocked_hrf_max(t), eval_res_max)
-  expect_false(identical(blocked_hrf_sum(t), blocked_hrf_max(t)))
+  expect_false(identical(blocked_hrf_sum(t), blocked_hrf_nosum(t)))
   expect_equal(blocked_hrf_norm(t), eval_res_norm)
   expect_equal(max(abs(blocked_hrf_norm(t))), 1) # Check normalization worked
+
+  # Regression: summate = FALSE returns normalized weighted integration,
+  # not a pointwise max across offsets.
+  weight_sum <- sum(fmrihrf:::.block_offsets_weights(width, precision)$weights)
+  expect_equal(blocked_hrf_nosum(t), blocked_hrf_sum(t) / weight_sum, tolerance = 1e-10)
+
+  legacy_hmat <- do.call(cbind, lapply(fmrihrf:::.block_offsets_weights(width, precision)$offsets, function(offset) {
+    base_hrf(t - offset) * exp(-log(2) * offset / half_life_inf)
+  }))
+  legacy_pointwise_max <- apply(legacy_hmat, 1, max, na.rm = TRUE)
+  expect_gt(max(abs(blocked_hrf_nosum(t) - legacy_pointwise_max)), 1e-3)
 
   # Test width_block > width_no_block (as in gen_hrf test)
   result_block <- blocked_hrf_sum(t)
@@ -402,6 +410,23 @@ test_that("block_hrf correctly blocks an HRF object", {
   # Test negligible width
   blocked_negligible <- block_hrf(base_hrf, width = 0.01, precision = 0.1, half_life = half_life_inf)
   expect_equal(blocked_negligible(t), base_hrf(t))
+})
+
+test_that("block_hrf summate = FALSE scales multi-basis responses by block weight", {
+  base_hrf <- HRF_SPMG2
+  t <- seq(0, 30, by = 0.2)
+  width <- 4
+  precision <- 0.2
+
+  blocked_sum <- block_hrf(base_hrf, width = width, precision = precision, summate = TRUE, normalize = FALSE)
+  blocked_nosum <- block_hrf(base_hrf, width = width, precision = precision, summate = FALSE, normalize = FALSE)
+
+  y_sum <- blocked_sum(t)
+  y_nosum <- blocked_nosum(t)
+  weight_sum <- sum(fmrihrf:::.block_offsets_weights(width, precision)$weights)
+
+  expect_equal(dim(y_nosum), dim(y_sum))
+  expect_equal(y_nosum, y_sum / weight_sum, tolerance = 1e-10)
 })
 
 test_that("normalise_hrf correctly normalises an HRF object", {
@@ -432,7 +457,8 @@ test_that("normalise_hrf correctly normalises an HRF object", {
   
   # Test with an already normalised HRF (should remain normalised)
   norm_spmg1 <- normalise_hrf(HRF_SPMG1)
-  expect_equal(max(abs(norm_spmg1(t))), 1, tolerance = 1e-7)
+  expect_lte(max(abs(norm_spmg1(t))), 1 + 1e-7)
+  expect_gt(max(abs(norm_spmg1(seq(0, attr(norm_spmg1, "span"), by = 0.001)))), 0.999)
   
   # Test with multi-basis HRF (HRF_SPMG2)
   unnorm_spmg2_func <- function(t) cbind(5 * HRF_SPMG2(t)[,1], 10 * HRF_SPMG2(t)[,2])
@@ -441,8 +467,56 @@ test_that("normalise_hrf correctly normalises an HRF object", {
   
   expect_equal(nbasis(norm_spmg2), 2)
   result_norm_spmg2 <- norm_spmg2(t)
-  expect_equal(max(abs(result_norm_spmg2[,1])), 1)
-  expect_equal(max(abs(result_norm_spmg2[,2])), 1)
+  expect_lte(max(abs(result_norm_spmg2[,1])), 1 + 1e-7)
+  expect_lte(max(abs(result_norm_spmg2[,2])), 1 + 1e-7)
+  result_norm_spmg2_dense <- norm_spmg2(seq(0, 20, by = 0.001))
+  expect_gt(max(abs(result_norm_spmg2_dense[,1])), 0.999)
+  expect_gt(max(abs(result_norm_spmg2_dense[,2])), 0.999)
+})
+
+test_that("normalise_hrf is invariant to requested evaluation grid", {
+  unnorm <- as_hrf(function(t) 5 * dnorm(t, 6, 2), name = "unnorm_gauss")
+  normed <- normalise_hrf(unnorm)
+
+  dense_t <- seq(0, 20, by = 0.1)
+  coarse_t <- seq(0, 20, by = 4)
+
+  dense_peak <- max(abs(normed(dense_t)))
+  coarse_peak <- max(abs(normed(coarse_t)))
+
+  expect_equal(dense_peak, 1, tolerance = 1e-7)
+  expect_lt(coarse_peak, 1)
+})
+
+test_that("basis functions are zero outside [0, span]", {
+  t <- c(-1, 0, 6, 24, 25)
+  span <- 24
+
+  bs_basis <- hrf_bspline(t, span = span, N = 5, degree = 3, intercept = TRUE)
+  sine_basis <- hrf_sine(t, span = span, N = 3)
+  fourier_basis <- hrf_fourier(t, span = span, nbasis = 4)
+
+  expect_true(all(bs_basis[t < 0 | t > span, ] == 0))
+  expect_true(all(sine_basis[t < 0 | t > span, ] == 0))
+  expect_true(all(fourier_basis[t < 0 | t > span, ] == 0))
+
+  # Regression for wrap-around bug: out-of-support bspline rows should not
+  # copy an in-support interior row.
+  expect_false(isTRUE(all.equal(bs_basis[t > span, , drop = FALSE], bs_basis[t == 6, , drop = FALSE])))
+})
+
+test_that("block_hrf summation is stable across precision choices", {
+  t <- seq(0, 30, by = 0.1)
+  blocked_coarse <- block_hrf(HRF_SPMG1, width = 5, precision = 0.2, half_life = Inf, summate = TRUE)
+  blocked_fine <- block_hrf(HRF_SPMG1, width = 5, precision = 0.05, half_life = Inf, summate = TRUE)
+
+  y_coarse <- blocked_coarse(t)
+  y_fine <- blocked_fine(t)
+
+  peak_ratio <- max(abs(y_fine)) / max(abs(y_coarse))
+  expect_gt(peak_ratio, 0.9)
+  expect_lt(peak_ratio, 1.1)
+  expect_equal(y_fine, y_coarse, tolerance = 0.05)
 })
 
 test_that("normalised multi-basis HRF evaluated at single point returns matrix", {

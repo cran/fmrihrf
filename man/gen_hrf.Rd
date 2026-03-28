@@ -28,7 +28,9 @@ gen_hrf(
 
 \item{half_life}{Half-life decay parameter for exponential decay in seconds (passed to `block_hrf`). Default is Inf (no decay).}
 
-\item{summate}{Whether to summate within blocks (passed to `block_hrf`). Default is TRUE.}
+\item{summate}{Passed to `block_hrf()` when `width > 0`. If `TRUE` (default),
+block responses are integrated; if `FALSE`, the integrated response is
+scaled by total block weight so amplitude does not grow with block width.}
 
 \item{normalize}{If TRUE, applies `normalise_hrf` at the end. Default is FALSE.}
 

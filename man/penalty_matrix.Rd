@@ -40,7 +40,7 @@ penalty_matrix(x, ...)
 \item{shrink_deriv}{Numeric; penalty weight for derivative terms in SPMG2/SPMG3 bases (default: 2)}
 }
 \value{
-A symmetric positive definite penalty matrix of dimension nbasis(x) × nbasis(x)
+A symmetric positive definite penalty matrix of dimension nbasis(x) x nbasis(x)
 }
 \description{
 Generate a penalty matrix for regularizing HRF basis coefficients. The penalty matrix

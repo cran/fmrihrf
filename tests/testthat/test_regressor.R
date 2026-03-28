@@ -123,3 +123,33 @@ test_that("evaluate.Reg validates grid and precision", {
   expect_error(evaluate(reg, 0:1, precision = 0, method = "conv"), "precision")
   expect_error(evaluate(reg, 0:1, precision = -1, method = "conv"), "precision")
 })
+
+test_that("single-trial regressors with different durations normalize to peak 1", {
+  grid <- seq(0, 40, by = 0.1)
+  st_short <- single_trial_regressor(onsets = 10, duration = 1, hrf = HRF_SPMG1)
+  st_long <- single_trial_regressor(onsets = 10, duration = 6, hrf = HRF_SPMG1)
+
+  y_short <- evaluate(st_short, grid, method = "conv", precision = 0.1, normalize = TRUE)
+  y_long <- evaluate(st_long, grid, method = "conv", precision = 0.1, normalize = TRUE)
+
+  expect_equal(max(abs(y_short)), 1, tolerance = 1e-6)
+  expect_equal(max(abs(y_long)), 1, tolerance = 1e-6)
+})
+
+test_that("evaluate.Reg normalize is consistent across methods", {
+  reg <- regressor(onsets = c(2, 10), duration = c(1, 4), amplitude = c(1, 1), hrf = HRF_SPMG1)
+  grid <- seq(0, 30, by = 0.25)
+
+  y_conv <- evaluate(reg, grid, method = "conv", precision = 0.1, normalize = TRUE)
+  y_loop <- evaluate(reg, grid, method = "loop", precision = 0.1, normalize = TRUE)
+
+  expect_equal(max(abs(y_conv)), 1, tolerance = 1e-6)
+  expect_equal(max(abs(y_loop)), 1, tolerance = 1e-6)
+  expect_equal(y_conv, y_loop, tolerance = 0.05)
+})
+
+test_that("evaluate.Reg validates normalize argument", {
+  reg <- regressor(onsets = 0, hrf = BOX_HRF, span = 1)
+  expect_error(evaluate(reg, 0:1, normalize = NA), "normalize")
+  expect_error(evaluate(reg, 0:1, normalize = 1), "normalize")
+})

@@ -41,8 +41,9 @@ versions, the `span` is not automatically adjusted based on `duration`;
 ensure the provided or inferred `span` is sufficient for your longest event duration.}
 
 \item{summate}{Logical scalar; if `TRUE` (default), the HRF response amplitude scales
-with the duration of sustained events (via internal convolution/summation). If `FALSE`,
-the response reflects the peak HRF reached during the event duration.}
+with the duration of sustained events (via weighted integration). If `FALSE`,
+weighted integration is normalized by total block weight so amplitude does
+not grow with duration.}
 }
 \value{
 An S3 object of class `Reg` and `list`

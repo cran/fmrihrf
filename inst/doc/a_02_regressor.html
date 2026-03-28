@@ -12,7 +12,7 @@
 
 <meta name="author" content="Bradley R. Buchsbaum" />
 
-<meta name="date" content="2026-02-09" />
+<meta name="date" content="2026-03-28" />
 
 <title>Building fMRI Regressors</title>
 
@@ -341,7 +341,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">Building fMRI Regressors</h1>
 <h4 class="author">Bradley R. Buchsbaum</h4>
-<h4 class="date">2026-02-09</h4>
+<h4 class="date">2026-03-28</h4>
 
 
 
@@ -418,8 +418,8 @@ length of <code>onsets</code>.</p>
 <h3>Duration and Summation</h3>
 <p>By default (<code>summate=TRUE</code>), the predicted response
 accumulates if events overlap or have extended duration. Setting
-<code>summate=FALSE</code> models saturation, where the response width
-increases with duration, but the peak amplitude doesn’t necessarily.</p>
+<code>summate=FALSE</code> preserves the same temporal profile but the
+peak amplitude does not grow with duration.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="co"># Create regressor with varying durations, summate=FALSE</span></span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>reg_var_dur_nosum <span class="ot">&lt;-</span> <span class="fu">regressor</span>(onsets_var_dur, HRF_SPMG1,</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>                               <span class="at">duration =</span> durations_var, <span class="at">summate =</span> <span class="cn">FALSE</span>)</span>

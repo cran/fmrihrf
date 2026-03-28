@@ -1,15 +1,28 @@
 ---
-title: "Hemodynamic Response Functions"
-author: "Bradley R. Buchsbaum"
-date: "`r Sys.Date()`"
+title: Hemodynamic Response Functions
+author: Bradley R. Buchsbaum
+date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Hemodynamic Response Functions}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r setup, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -121,7 +134,7 @@ plot_hrfs(hrf_spm_w1_norm, hrf_spm_w2_norm, hrf_spm_w4_norm,
 
 ### Modeling Saturation with `summate`
 
-The `summate` argument in `block_hrf` controls whether the response accumulates over the duration (`summate=TRUE`, default) or saturates (`summate=FALSE`). Saturation implies that the response reaches a plateau and doesn't increase further with longer stimulation.
+The `summate` argument in `block_hrf` controls whether the response accumulates over the duration (`summate=TRUE`, default) or stays constant (`summate=FALSE`). When `summate=FALSE`, the temporal profile is identical to the summated version but the peak amplitude does not grow with block duration.
 
 ```{r blocked_summate_false}
 # Create non-summating blocked HRFs
@@ -757,5 +770,3 @@ ggplot(pc_df_long, aes(x = Time, y = Value, color = Component)) +
 ```
 
 This empirical basis set can then be used in regression models just like any other pre-defined or custom basis set.
-
-

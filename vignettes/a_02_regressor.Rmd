@@ -1,15 +1,28 @@
 ---
-title: "Building fMRI Regressors"
-author: "Bradley R. Buchsbaum"
-date: "`r Sys.Date()`"
+title: Building fMRI Regressors
+author: Bradley R. Buchsbaum
+date: '`r Sys.Date()`'
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Building Regressors}
+  %\VignetteIndexEntry{Building fMRI Regressors}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+params:
+  family: red
+  preset: homage
+css: albers.css
+resource_files:
+- albers.css
+- albers.js
+includes:
+  in_header: |-
+    <script src="albers.js"></script>
+    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
+
 ---
 
 ```{r setup, include = FALSE}
+if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
@@ -85,7 +98,7 @@ plot(reg_var_dur, grid = scan_times_dur)
 
 ### Duration and Summation
 
-By default (`summate=TRUE`), the predicted response accumulates if events overlap or have extended duration. Setting `summate=FALSE` models saturation, where the response width increases with duration, but the peak amplitude doesn't necessarily.
+By default (`summate=TRUE`), the predicted response accumulates if events overlap or have extended duration. Setting `summate=FALSE` preserves the same temporal profile but the peak amplitude does not grow with duration.
 
 ```{r duration_no_summate}
 # Create regressor with varying durations, summate=FALSE
@@ -184,5 +197,3 @@ plot_regressors(reg_orig, reg_shifted,
                 show_onsets = TRUE,  # Show onsets for both
                 title = "Shifting a Regressor")
 ```
-
-

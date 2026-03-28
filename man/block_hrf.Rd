@@ -22,7 +22,9 @@ block_hrf(
 
 \item{half_life}{The half-life of an optional exponential decay applied during the block (default: Inf, meaning no decay).}
 
-\item{summate}{Logical; if TRUE (default), the responses from each time point within the block are summed. If FALSE, the maximum response at each time point is taken.}
+\item{summate}{Logical; if TRUE (default), responses within the block are
+integrated (summed). If FALSE, the integrated response is divided by the
+total block weight so amplitude does not grow with block width.}
 
 \item{normalize}{Logical; if TRUE, the resulting blocked HRF is scaled so that its peak value is 1 (default: FALSE).}
 }

@@ -34,7 +34,7 @@ hrf_blocked(
 
 \item{half_life}{A numeric value specifying the half-life of the exponential decay function, used to model response attenuation. Default is `Inf`, which means no decay.}
 
-\item{summate}{A logical value indicating whether to allow each impulse response function to "add" up. Default is `TRUE`.}
+\item{summate}{Logical; if TRUE (default), responses accumulate (peak grows with duration). If FALSE, the convolution is averaged so the temporal profile is preserved but peak amplitude does not grow with duration.}
 
 \item{normalize}{A logical value indicating whether to rescale the output so that the peak of the output is 1. Default is `FALSE`.}
 

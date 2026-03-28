@@ -143,7 +143,9 @@ bind_basis <- function(...) {
 #' @param width Optional block width in seconds. If non-zero, applies `block_hrf`.
 #' @param precision Sampling precision for block convolution (passed to `block_hrf`). Default is 0.1.
 #' @param half_life Half-life decay parameter for exponential decay in seconds (passed to `block_hrf`). Default is Inf (no decay).
-#' @param summate Whether to summate within blocks (passed to `block_hrf`). Default is TRUE.
+#' @param summate Passed to `block_hrf()` when `width > 0`. If `TRUE` (default),
+#'   block responses are integrated; if `FALSE`, the integrated response is
+#'   scaled by total block weight so amplitude does not grow with block width.
 #' @param normalize If TRUE, applies `normalise_hrf` at the end. Default is FALSE.
 #' @param name Optional name for the *final* HRF object. If NULL (default), a name is generated based on the base HRF and applied decorators.
 #' @param span Optional span for the *final* HRF object. If NULL (default), the span is determined by the base HRF and decorators.
@@ -482,7 +484,7 @@ hrf_lagged <- gen_hrf_lagged
 #' @param width A numeric value specifying the width of the block in seconds. Default is 5.
 #' @param precision A numeric value specifying the sampling resolution in seconds. Default is 0.1.
 #' @param half_life A numeric value specifying the half-life of the exponential decay function, used to model response attenuation. Default is `Inf`, which means no decay.
-#' @param summate A logical value indicating whether to allow each impulse response function to "add" up. Default is `TRUE`.
+#' @param summate Logical; if TRUE (default), responses accumulate (peak grows with duration). If FALSE, the convolution is averaged so the temporal profile is preserved but peak amplitude does not grow with duration.
 #' @param normalize A logical value indicating whether to rescale the output so that the peak of the output is 1. Default is `FALSE`.
 #' @param ... Extra arguments passed to the HRF function.
 #' @family gen_hrf
@@ -1075,7 +1077,7 @@ getHRF <- function(name = "spmg1", # Default to spmg1
 #' @param amplitude The scaling value for the event (default: 1).
 #' @param duration The duration of the event (seconds). If > 0, the HRF is evaluated over this duration (default: 0).
 #' @param precision The temporal resolution for evaluating responses when duration > 0 (default: 0.2).
-#' @param summate Logical; whether the HRF response should accumulate over the duration (default: TRUE). If FALSE, the maximum response within the duration window is taken (currently only supported for single-basis HRFs).
+#' @param summate Logical; whether the HRF response should accumulate over the duration (default: TRUE). If FALSE, the convolution is averaged so the temporal profile is preserved but peak amplitude does not grow with duration.
 #' @param normalize Logical; scale output so that the peak absolute value is 1 (default: FALSE). Applied *after* amplitude scaling and duration processing.
 #' @param ... Additional arguments (unused).
 #' @return A numeric vector or matrix of HRF values at the specified time points.
@@ -1115,7 +1117,9 @@ evaluate.HRF <- function(x, grid, amplitude = 1, duration = 0,
     base(grid)
   } else {
       # Block evaluation
-    offs <- seq(0, duration, by = precision)
+    quad <- .block_offsets_weights(duration, precision)
+    offs <- quad$offsets
+    weights <- quad$weights
       # Evaluate HRF at shifted time points for each offset
       # Use lapply to handle potential matrix output from multi-basis HRFs
       hlist <- lapply(offs, function(o) base(grid - o))
@@ -1124,25 +1128,26 @@ evaluate.HRF <- function(x, grid, amplitude = 1, duration = 0,
       is_multi_basis <- is.matrix(hlist[[1]])
       
       if (is_multi_basis) {
-          # Combine matrices (summation is standard for multi-basis)
-          if (summate) {
-             Reduce("+", hlist)
-    } else {
-             # Taking max per-basis-column across offsets is non-standard and complex.
-             # Sticking to summation for multi-basis block designs.
-             warning("summate=FALSE is not typically used with multi-basis HRFs during block evaluation. Using summation.", call. = FALSE)
-             Reduce("+", hlist)
+          weighted <- Map(function(vals, wt) vals * wt, hlist, weights)
+          res <- Reduce("+", weighted)
+          if (!summate) {
+            weight_sum <- sum(weights)
+            if (weight_sum > 0) {
+              res <- res / weight_sum
+            }
           }
+          res
       } else {
           # Single basis HRF: hlist contains vectors, bind them into a matrix
         hmat <- do.call(cbind, hlist)
-          if (summate) {
-              rowSums(hmat)
-          } else {
-              # For single basis, take the max across the duration window at each grid point
-              apply(hmat, 1, max, na.rm = TRUE) 
-              # Alternative: find which offset gives max? apply(hmat, 1, function(vals) vals[which.max(vals)])
+          res <- as.vector(hmat %*% weights)
+          if (!summate) {
+            weight_sum <- sum(weights)
+            if (weight_sum > 0) {
+              res <- res / weight_sum
+            }
           }
+          res
       }
   }
 

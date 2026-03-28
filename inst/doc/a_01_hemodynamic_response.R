@@ -1,4 +1,8 @@
+params <-
+list(family = "red", preset = "homage")
+
 ## ----setup, include = FALSE---------------------------------------------------
+if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",

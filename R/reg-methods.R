@@ -17,6 +17,9 @@
 #'     \item{loop}{Uses a pure R implementation involving looping through onsets. Can be slower, especially for many onsets.}
 #'   }
 #' @param sparse Logical indicating whether to return a sparse matrix (from the Matrix package). Default is FALSE.
+#' @param normalize Logical; if TRUE, scale evaluated regressor output to unit peak
+#'   (maximum absolute value of 1). For multi-basis regressors, each basis column
+#'   is normalized independently.
 #' @param ... Additional arguments passed down (e.g., to `evaluate.HRF` in the loop method).
 #' @examples
 #' # Create a regressor
@@ -37,7 +40,8 @@
 #' @importFrom memoise memoise
 #' @importFrom stats approx median convolve
 #' @importFrom Rcpp evalCpp
-evaluate.Reg <- function(x, grid, precision=.33, method=c("conv", "fft", "Rconv", "loop"), sparse = FALSE, ...) {
+evaluate.Reg <- function(x, grid, precision=.33, method=c("conv", "fft", "Rconv", "loop"),
+                         sparse = FALSE, normalize = FALSE, ...) {
 
   method <- match.arg(method)
 
@@ -49,6 +53,9 @@ evaluate.Reg <- function(x, grid, precision=.33, method=c("conv", "fft", "Rconv"
   if (!is.numeric(precision) || length(precision) != 1 || is.na(precision) ||
       precision <= 0) {
     stop("`precision` must be a positive numeric value.", call. = FALSE)
+  }
+  if (!is.logical(normalize) || length(normalize) != 1 || is.na(normalize)) {
+    stop("`normalize` must be a single logical value.", call. = FALSE)
   }
 
   # Prepare inputs using the helper function
@@ -88,6 +95,19 @@ evaluate.Reg <- function(x, grid, precision=.33, method=c("conv", "fft", "Rconv"
     matrix(result, nrow=length(grid), ncol=nb)
   } else {
       result
+  }
+
+  if (normalize) {
+    if (is.matrix(final_result)) {
+      peaks <- apply(final_result, 2, function(col) max(abs(col), na.rm = TRUE))
+      peaks[is.na(peaks) | peaks == 0] <- 1
+      final_result <- sweep(final_result, 2, peaks, "/")
+    } else {
+      peak <- max(abs(final_result), na.rm = TRUE)
+      if (!is.na(peak) && peak != 0) {
+        final_result <- final_result / peak
+      }
+    }
   }
   
   # Convert to sparse matrix if requested

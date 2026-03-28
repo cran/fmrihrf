@@ -69,15 +69,16 @@ hrf_bspline <- function(t, span=24, N=5, degree=3, ...) {
 				0
 			}
 	
-	if (any(t < 0)) {
-		t[t < 0] <- 0
+	t <- as.numeric(t)
+	in_support <- !is.na(t) & t >= 0 & t <= span
+	t_eval <- t
+	t_eval[!in_support] <- 0
+
+	basis <- splines::bs(t_eval, df=N, knots=knots, degree=degree, Boundary.knots=c(0,span),...)
+	if (any(!in_support)) {
+		basis[!in_support, ] <- 0
 	}
-	
-	if(any(t > span)) {
-		t[t > span] <- 0
-	}
-	
-	splines::bs(t, df=N, knots=knots, degree=degree, Boundary.knots=c(0,span),...)
+	basis
 }
 
 
@@ -215,9 +216,14 @@ hrf_spmg1_second_deriv <- function(t, P1 = 5, P2 = 15, A1 = .0833) {
 #' @examples
 #' hrf_sine_basis <- hrf_sine(seq(0, 20, by = 0.5), N = 4)
 hrf_sine <- function(t, span = 24, N = 5) {
-  sine_basis <- sapply(1:N, function(n) {
+  t <- as.numeric(t)
+  in_support <- !is.na(t) & t >= 0 & t <= span
+  sine_basis <- vapply(1:N, function(n) {
     sin(2 * pi * n * t / span)
-  })
+  }, numeric(length(t)))
+  if (any(!in_support)) {
+    sine_basis[!in_support, ] <- 0
+  }
   return(sine_basis)
 }
 
@@ -356,15 +362,20 @@ hrf_half_cosine <- function(t, h1=1, h2=5, h3=7, h4=7, f1=0, f2=0) {
 #' matplot(t, basis, type = "l", main = "Fourier Basis Functions")
 #' @export
 hrf_fourier <- function(t, span = 24, nbasis = 5) {
+  t <- as.numeric(t)
+  in_support <- !is.na(t) & t >= 0 & t <= span
   freqs <- ceiling(seq_len(nbasis) / 2)
-  basis <- sapply(seq_len(nbasis), function(k) {
+  basis <- vapply(seq_len(nbasis), function(k) {
     n <- freqs[k]
     if (k %% 2 == 1) {
       sin(2 * pi * n * t / span)
     } else {
       cos(2 * pi * n * t / span)
     }
-  })
+  }, numeric(length(t)))
+  if (any(!in_support)) {
+    basis[!in_support, ] <- 0
+  }
   return(basis)
 }
 
@@ -872,4 +883,3 @@ hrf_basis_lwu <- function(theta0, t, normalize_primary = "none") {
   basis_mat <- cbind(h0 = h0, deriv_matrix)
   return(basis_mat)
 }
-

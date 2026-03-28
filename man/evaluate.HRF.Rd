@@ -26,7 +26,7 @@
 
 \item{precision}{The temporal resolution for evaluating responses when duration > 0 (default: 0.2).}
 
-\item{summate}{Logical; whether the HRF response should accumulate over the duration (default: TRUE). If FALSE, the maximum response within the duration window is taken (currently only supported for single-basis HRFs).}
+\item{summate}{Logical; whether the HRF response should accumulate over the duration (default: TRUE). If FALSE, the convolution is averaged so the temporal profile is preserved but peak amplitude does not grow with duration.}
 
 \item{normalize}{Logical; scale output so that the peak absolute value is 1 (default: FALSE). Applied *after* amplitude scaling and duration processing.}
 

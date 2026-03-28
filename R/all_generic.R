@@ -152,7 +152,7 @@ nbasis <- function(x, ...) UseMethod("nbasis")
 #' @param order Integer specifying the order of the penalty (default: 2)
 #' @param shrink_deriv Numeric; penalty weight for derivative terms in SPMG2/SPMG3 bases (default: 2)
 #' @param ... Additional arguments passed to specific methods
-#' @return A symmetric positive definite penalty matrix of dimension nbasis(x) × nbasis(x)
+#' @return A symmetric positive definite penalty matrix of dimension nbasis(x) x nbasis(x)
 #' @details
 #' The penalty matrix R is used in regularized estimation as lambda * h^T R h, where h are
 #' the basis coefficients and lambda is the regularization parameter. Well-designed penalty

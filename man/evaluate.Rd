@@ -13,6 +13,7 @@ evaluate(x, grid, ...)
   precision = 0.33,
   method = c("conv", "fft", "Rconv", "loop"),
   sparse = FALSE,
+  normalize = FALSE,
   ...
 )
 }
@@ -35,6 +36,10 @@ evaluate(x, grid, ...)
 }}
 
 \item{sparse}{Logical indicating whether to return a sparse matrix (from the Matrix package). Default is FALSE.}
+
+\item{normalize}{Logical; if TRUE, scale evaluated regressor output to unit peak
+(maximum absolute value of 1). For multi-basis regressors, each basis column
+is normalized independently.}
 }
 \value{
 A numeric vector or matrix containing the evaluated regressor values

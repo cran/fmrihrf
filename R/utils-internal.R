@@ -19,4 +19,26 @@ recycle_or_error <- function(x, n, name) {
 #' @noRd
 `%||%` <- function(a, b) {
   if (is.null(a)) b else a
-} 
+}
+
+#' @importFrom utils tail
+#' @keywords internal
+#' @noRd
+.block_offsets_weights <- function(width, precision) {
+  offsets <- seq(0, width, by = precision)
+  if (tail(offsets, 1) < width) {
+    offsets <- c(offsets, width)
+  }
+  if (length(offsets) == 1) {
+    return(list(offsets = offsets, weights = 1))
+  }
+
+  deltas <- diff(offsets)
+  weights <- numeric(length(offsets))
+  weights[1] <- deltas[1] / 2
+  weights[length(offsets)] <- deltas[length(deltas)] / 2
+  if (length(offsets) > 2) {
+    weights[2:(length(offsets) - 1)] <- (deltas[-length(deltas)] + deltas[-1]) / 2
+  }
+  list(offsets = offsets, weights = weights)
+}
