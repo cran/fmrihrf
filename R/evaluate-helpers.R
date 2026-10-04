@@ -80,7 +80,12 @@ prep_reg_inputs <- function(x, grid, precision) {
   onset_max_bound <- grid[length(grid)]
 
   # Start with potentially already filtered data from Reg constructor
-  keep_indices <- which(x$onsets >= onset_min_bound & x$onsets <= onset_max_bound)
+  # A block can begin before the ordinary point-event bound and still overlap
+  # the requested grid through its duration. Filter on the end of the neural
+  # input, not only on its onset, so late block tails remain available.
+  event_ends <- x$onsets + pmax(x$duration, 0)
+  keep_indices <- which(event_ends >= onset_min_bound &
+                        x$onsets <= onset_max_bound)
 
   # Note: Amplitude filtering already done in Reg(), no need to repeat here
   valid_ons <- x$onsets[keep_indices]
@@ -131,32 +136,6 @@ prep_reg_inputs <- function(x, grid, precision) {
 
 # Internal Evaluation Engines -----
 
-#' FFT-based Regressor Evaluation Engine
-#' @param p A list returned by prep_reg_inputs.
-#' @param ... Additional arguments.
-#' @keywords internal
-#' @noRd
-eval_fft <- function(p, ...) {
-  # List HRFs require per-event evaluation - fallback to loop
-
-  if (isTRUE(p$hrf_is_list)) {
-    return(eval_loop(p, ...))
-  }
-
-  # Call the unified C++ wrapper
-  result <- evaluate_regressor_cpp(
-              grid = p$grid,
-              onsets = p$valid_ons,
-              durations = p$valid_durs,
-              amplitudes = p$valid_amp,
-              hrf_matrix = p$hrf_fine_matrix,
-              hrf_span = p$hrf_span,
-              precision = p$precision,
-              method = "fft"
-            )
-  result
-}
-
 #' Direct Convolution Regressor Evaluation Engine
 #' @param p A list returned by prep_reg_inputs.
 #' @param ... Additional arguments.
@@ -177,68 +156,9 @@ eval_conv <- function(p, ...) {
               hrf_matrix = p$hrf_fine_matrix,
               hrf_span = p$hrf_span,
               precision = p$precision,
-              method = "conv"
+              method = "conv",
+              summate = isTRUE(p$summate)
             )
-  result
-}
-
-#' R Convolution Regressor Evaluation Engine
-#' @param p A list returned by prep_reg_inputs.
-#' @param ... Additional arguments.
-#' @keywords internal
-#' @noRd
-#' @importFrom stats convolve approx
-eval_Rconv <- function(p, ...) {
-  # List HRFs require per-event evaluation - fallback to loop
-  if (isTRUE(p$hrf_is_list)) {
-    return(eval_loop(p, ...))
-  }
-
-  # Check conditions (moved from evaluate.Reg)
-  is_regular_grid <- length(p$grid) > 1 && length(unique(round(diff(p$grid), 8))) == 1
-  is_constant_duration <- length(unique(p$valid_durs)) <= 1
-
-  if (!is_regular_grid || !is_constant_duration) {
-    warning("Method 'Rconv' requires a regular grid and constant event durations. Falling back to 'loop' method.")
-    return(eval_loop(p, ...)) # Call the loop engine directly as fallback
-  }
-  
-  # Proceed with R convolution using stats::convolve
-  delta <- numeric(length(p$fine_grid))
-  onset_indices <- floor((p$valid_ons - p$fine_grid[1]) / p$precision) + 1
-  valid_onset_indices <- onset_indices >= 1 & onset_indices <= length(p$fine_grid)
-
-  if (length(p$valid_durs) > 0) {
-    dur_len <- floor(p$valid_durs[1] / p$precision)
-  } else {
-    dur_len <- 0
-  }
-
-  for (i in which(valid_onset_indices)) {
-    start_idx <- onset_indices[i]
-    end_idx <- min(start_idx + dur_len, length(p$fine_grid))
-    delta[start_idx:end_idx] <- delta[start_idx:end_idx] + p$valid_amp[i]
-  }
-  
-  samhrf <- p$hrf_fine_matrix # Already evaluated and potentially memoized
-  nb <- p$nb
-  
-  if (nb > 1) {
-    lowres <- matrix(0, length(p$grid), nb)
-    for (b in 1:nb) {
-      highres_conv <- stats::convolve(delta, rev(samhrf[, b]), type = "open")
-      valid_len <- length(p$fine_grid)
-      highres_trimmed <- highres_conv[1:valid_len]
-      interp_res <- approx(p$fine_grid, highres_trimmed, xout = p$grid, rule = 2)$y
-      lowres[, b] <- interp_res
-    }
-    result <- lowres
-  } else {
-    highres_conv <- stats::convolve(delta, rev(as.vector(samhrf)), type = "open")
-    valid_len <- length(p$fine_grid)
-    highres_trimmed <- highres_conv[1:valid_len]
-    result <- approx(p$fine_grid, highres_trimmed, xout = p$grid, rule = 2)$y
-  }
   result
 }
 
@@ -271,8 +191,6 @@ eval_loop <- function(p, ...) {
   precision <- p$precision
   summate <- p$summate
 
-  dspan <- hrf_span / stats::median(diff(grid), na.rm=TRUE) # Approx span in grid units
-
   # Pre-calculate nearest grid indices for onsets (more robust than RANN for this)
   # Find the index of the grid point *just before or at* each onset
   nidx <- findInterval(valid_ons, grid)
@@ -281,19 +199,45 @@ eval_loop <- function(p, ...) {
   outmat <- matrix(0, length(grid), nb)
 
   for (i in seq_along(valid_ons)) {
+    # A blocked event responds out to hrf_span + duration, not hrf_span. Using
+    # the bare span truncated the tail of every block, leaving a residual error
+    # that did not shrink with `precision`.
+    event_span <- hrf_span + max(valid_durs[i], 0)
+
     start_grid_idx <- nidx[i]
-    end_grid_idx <- min(start_grid_idx + ceiling(dspan) + 5, length(grid))
+    # Select the final grid point inside the event's support directly. Unlike
+    # estimating an index count from median(diff(grid)), this also works for a
+    # one-point grid and for irregular or duplicated sampling grids.
+    end_grid_idx <- findInterval(valid_ons[i] + event_span, grid)
     if (start_grid_idx > length(grid)) next
-    grid.idx <- start_grid_idx:end_grid_idx
+    if (end_grid_idx < start_grid_idx) next
+    grid.idx <- seq.int(start_grid_idx, end_grid_idx)
 
     relOns <- grid[grid.idx] - valid_ons[i]
-    valid_rel_idx <- which(relOns >= 0 & relOns <= hrf_span)
+    valid_rel_idx <- which(relOns >= 0 & relOns <= event_span)
 
     if (length(valid_rel_idx) > 0) {
         target_indices_outmat <- grid.idx[valid_rel_idx]
 
         # Select the appropriate HRF for this event
         current_hrf <- if (hrf_is_list) p$valid_hrfs[[i]] else p$hrf
+
+        # Match the finite kernel sampled by the convolution engine. Mask
+        # before block integration, not after: a block near the end of the
+        # span contains both supported and unsupported kernel lags.
+        raw_hrf <- current_hrf
+        current_hrf <- local({
+          kernel <- raw_hrf
+          cutoff <- hrf_span
+          bounded <- function(t) {
+            values <- kernel(t)
+            outside <- t < 0 | t > cutoff
+            if (is.matrix(values)) values[outside, ] <- 0 else values[outside] <- 0
+            values
+          }
+          attributes(bounded) <- attributes(kernel)
+          bounded
+        })
 
         # Call evaluate S3 generic, should dispatch to evaluate.HRF
         resp <- evaluate(current_hrf, relOns[valid_rel_idx], amplitude=valid_amp[i],

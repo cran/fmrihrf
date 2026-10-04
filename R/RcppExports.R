@@ -5,15 +5,11 @@ neural_input_rcpp <- function(x, from, to, resolution) {
     .Call(`_fmrihrf_neural_input_rcpp`, x, from, to, resolution)
 }
 
-evaluate_regressor_convolution <- function(grid, onsets, durations, amplitudes, hrf_values, hrf_span, start, end, precision) {
-    .Call(`_fmrihrf_evaluate_regressor_convolution`, grid, onsets, durations, amplitudes, hrf_values, hrf_span, start, end, precision)
+evaluate_regressor_convolution <- function(grid, onsets, durations, amplitudes, hrf_values, hrf_span, start, end, precision, summate = TRUE) {
+    .Call(`_fmrihrf_evaluate_regressor_convolution`, grid, onsets, durations, amplitudes, hrf_values, hrf_span, start, end, precision, summate)
 }
 
-evaluate_regressor_fast <- function(grid, onsets, durations, amplitudes, hrfFine, dt, span) {
-    .Call(`_fmrihrf_evaluate_regressor_fast`, grid, onsets, durations, amplitudes, hrfFine, dt, span)
-}
-
-evaluate_regressor_cpp <- function(grid, onsets, durations, amplitudes, hrf_matrix, hrf_span, precision, method = "fft") {
-    .Call(`_fmrihrf_evaluate_regressor_cpp`, grid, onsets, durations, amplitudes, hrf_matrix, hrf_span, precision, method)
+evaluate_regressor_cpp <- function(grid, onsets, durations, amplitudes, hrf_matrix, hrf_span, precision, method = "conv", summate = TRUE) {
+    .Call(`_fmrihrf_evaluate_regressor_cpp`, grid, onsets, durations, amplitudes, hrf_matrix, hrf_span, precision, method, summate)
 }
 

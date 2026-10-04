@@ -26,6 +26,7 @@ HRF_SPMG1(5)
 \seealso{
 Other HRF_decorator_functions: 
 \code{\link{block_hrf}()},
-\code{\link{normalise_hrf}()}
+\code{\link{normalise_hrf}()},
+\code{\link{normalize_hrf}()}
 }
 \concept{HRF_decorator_functions}

@@ -17,7 +17,7 @@ hrf_from_coefficients.HRF <- function(hrf, h, name = NULL, ...) {
   if (is.null(name)) {
     name <- paste0(attr(hrf, "name"), "_from_coef")
   }
-  as_hrf(
+  .as_closed_hrf(
     f      = weighted_fun,
     name   = name,
     nbasis = 1L,

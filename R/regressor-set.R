@@ -67,7 +67,7 @@ regressor_set <- function(onsets, fac, hrf = HRF_SPMG1, duration = 0,
 #' @param ... Additional arguments passed to evaluate
 #' @export
 evaluate.RegSet <- function(x, grid, precision = .33,
-                            method = c("conv", "fft", "Rconv", "loop"),
+                            method = c("conv", "loop", "fft", "Rconv"),
                             sparse = FALSE, ...) {
   method <- match.arg(method)
   mats <- lapply(x$regs, evaluate, grid = grid, precision = precision,

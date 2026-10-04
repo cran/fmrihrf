@@ -1,7 +1,7 @@
 Package: fmrihrf
 Type: Package
 Title: Hemodynamic Response Functions for fMRI Data Analysis
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person("Bradley", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre"))
 Description: Creates, manipulates, and evaluates hemodynamic response functions
     and event-related regressors for functional magnetic resonance imaging data
@@ -12,20 +12,20 @@ Description: Creates, manipulates, and evaluates hemodynamic response functions
 License: MIT + file LICENSE
 Encoding: UTF-8
 RoxygenNote: 7.3.3
-Imports: Rcpp, assertthat, purrr, stats, Matrix, cli, memoise,
-        numDeriv, splines, pracma
+Imports: Rcpp, assertthat, purrr, stats, Matrix, cli, jsonlite,
+        memoise, numDeriv, splines, pracma
 LinkingTo: Rcpp, RcppArmadillo
 SystemRequirements: C++17
 Depends: R (>= 3.5.0)
 Suggests: testthat (>= 3.0.0), knitr, rmarkdown, ggplot2, dplyr, tidyr,
-        viridis, scales, microbenchmark
+        viridis, scales, pkgload, albersdown (>= 2.1.0)
 VignetteBuilder: knitr
 URL: https://bbuchsbaum.github.io/fmrihrf/
 BugReports: https://github.com/bbuchsbaum/fmrihrf/issues
-Config/Needs/website: https://github.com/bbuchsbaum/albersdown
+Config/Needs/website: albersdown
 NeedsCompilation: yes
-Packaged: 2026-03-28 13:04:23 UTC; bbuchsbaum
+Packaged: 2026-10-03 21:10:05 UTC; runner
 Author: Bradley Buchsbaum [aut, cre]
 Maintainer: Bradley Buchsbaum <brad.buchsbaum@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-03-28 13:50:02 UTC
+Date/Publication: 2026-10-04 02:20:02 UTC

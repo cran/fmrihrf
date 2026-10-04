@@ -11,7 +11,7 @@ evaluate(x, grid, ...)
   x,
   grid,
   precision = 0.33,
-  method = c("conv", "fft", "Rconv", "loop"),
+  method = c("conv", "loop", "fft", "Rconv"),
   sparse = FALSE,
   normalize = FALSE,
   ...
@@ -26,13 +26,24 @@ evaluate(x, grid, ...)
 
 \item{precision}{Numeric sampling precision for internal HRF evaluation and convolution (seconds).}
 
-\item{method}{The evaluation method: 
+\item{method}{The evaluation method:
 \describe{
-  \item{conv}{(Default) Uses the C++ direct convolution (`evaluate_regressor_convolution`). Generally safer and more predictable.}
-  \item{fft}{Uses the fast C++ FFT convolution (`evaluate_regressor_fast`). Can be faster but may fail with very fine precision or wide grids.  
-    Extremely fine `precision` or wide `grid` ranges may trigger an internal FFT size exceeding ~1e7, which results in an error.}
-  \item{Rconv}{Uses an R-based convolution (`stats::convolve`). Requires constant event durations and a regular sampling grid. Can be faster than the R loop for many events meeting these criteria.}
-  \item{loop}{Uses a pure R implementation involving looping through onsets. Can be slower, especially for many onsets.}
+  \item{conv}{(Default, recommended) C++ direct convolution. Fastest in
+    every configuration benchmarked -- typically 3-10x faster than `fft`
+    and 10-100x faster than `loop` -- and accurate to ~1e-3 relative
+    against numerical integration of the same design.}
+  \item{loop}{Pure R, evaluating the HRF at exact per-event relative times.
+    Roughly twice as accurate as `conv` because event onsets are never
+    quantised to the internal grid, but far slower. Retained as a
+    reference implementation, and used automatically when `hrf` is a list
+    of per-event HRFs.}
+  \item{fft}{Deprecated. The HRF is short relative to the sampled design,
+    so an FFT never repaid its zero-padding; it was also the only method
+    that could fail outright, on an internal FFT size above ~1e7. Now
+    evaluates via `conv` and warns.}
+  \item{Rconv}{Deprecated. An R reimplementation of `conv` that required a
+    regular grid and constant durations and silently fell back to `loop`
+    otherwise. Now evaluates via `conv` and warns.}
 }}
 
 \item{sparse}{Logical indicating whether to return a sparse matrix (from the Matrix package). Default is FALSE.}

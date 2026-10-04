@@ -2,35 +2,35 @@
 title: HRF Generators
 author: Bradley R. Buchsbaum
 date: '`r Sys.Date()`'
-output: rmarkdown::html_vignette
-vignette: >
+output:
+  albersdown::albers_vignette:
+    family: red
+    preset: interaction
+    toc: yes
+    toc_depth: 2.0
+
+vignette: |
   %\VignetteIndexEntry{HRF Generators}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
+  # Sharper website figures; keep the CRAN vignette archive compact.
+  fig.retina = if (identical(Sys.getenv("IN_PKGDOWN"), "true")) 2 else 1,
   fig.width = 7,
-  fig.height = 5,
+  fig.height = 4,
   message = FALSE,
   warning = FALSE
 )
+# CRAN builds: skip dark-mode figure twins to keep the source package small;
+# the pkgdown site (IN_PKGDOWN = "true") keeps them.
+if (!identical(Sys.getenv("IN_PKGDOWN"), "true")) {
+  options(albersdown.dark_figures = FALSE)
+}
 library(fmrihrf)
 library(ggplot2)
 library(dplyr)
@@ -77,23 +77,18 @@ head(mat)
 
 ## Visualising FIR Basis Functions
 
-Here is a quick look at an FIR basis generated with 10 bins over a 20 second
-window:
+A finite impulse response (FIR) basis makes no assumption about the shape of
+the response: each basis function is a boxcar covering one time bin after the
+event, and the fitted weights trace out the response bin by bin. Here we
+create a basis with 10 bins over a 20-second window; each bin is a 2-second
+boxcar, labelled at its top:
 
-```{r fir-basis}
-# Use the pre-defined FIR basis or create one with gen_hrf
-fir10 <- HRF_FIR  # Pre-defined FIR with 12 basis functions
-resp <- fir10(times)
+```{r fir-basis, fig.alt="Ten FIR basis functions, each a 2 second boxcar of height 1 labelled B1 to B10; bin k covers 2(k-1) to 2k seconds after the event, so together they tile 0 to 20 seconds."}
+fir10 <- hrf_fir_generator(nbasis = 10, span = 20)
+print(fir10)
 
-fir_df <- data.frame(Time = times, resp)
-fir_long <- tidyr::pivot_longer(fir_df, -Time)
-
-ggplot(fir_long, aes(Time, value, colour = name)) +
-  geom_line(linewidth = 1) +
-  labs(title = "Finite Impulse Response Basis",
-       x = "Time (s)", y = "Response") +
-  theme_minimal() +
-  theme(legend.position = "none")
+plot_hrfs(fir10, time = seq(0, 22, by = 0.02),
+          title = "FIR basis: 10 bins of 2 s")
 ```
 
 <!-- ## Using `getHRF`

@@ -48,7 +48,7 @@ regressor_design <- function(onsets, fac, block, sframe,
                              hrf = HRF_SPMG1, duration = 0,
                              amplitude = 1, span = 40,
                              precision = .33,
-                             method = c("conv", "fft", "Rconv", "loop"),
+                             method = c("conv", "loop", "fft", "Rconv"),
                              sparse = FALSE,
                              summate = TRUE) {
   fac   <- as.factor(fac)

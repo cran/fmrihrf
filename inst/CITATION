@@ -1,9 +1,9 @@
 bibentry(
   bibtype  = "Manual",
-  title    = "fmrihrf: fMRI Hemodynamic Response Function (HRF) and Regressor Tools",
+  title    = "fmrihrf: Hemodynamic Response Functions for fMRI Data Analysis",
   author   = person("Bradley", "Buchsbaum", email = "brad.buchsbaum@gmail.com", role = c("aut", "cre")),
-  year     = "2024",
-  note     = "R package version 0.1.0",
+  year     = "2026",
+  note     = "R package version 0.4.0",
   url      = "https://bbuchsbaum.github.io/fmrihrf/",
   header   = "To cite fmrihrf in publications use:"
 )

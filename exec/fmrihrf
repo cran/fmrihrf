@@ -1,0 +1,69 @@
+#!/usr/bin/env Rscript
+
+args_all <- commandArgs(FALSE)
+file_arg <- grep("^--file=", args_all, value = TRUE)
+script <- if (length(file_arg) > 0) {
+  sub("^--file=", "", file_arg[[1]])
+} else {
+  candidates <- args_all[basename(args_all) == "fmrihrf" |
+                           grepl("[/\\\\]exec[/\\\\]fmrihrf$", args_all)]
+  if (length(candidates) > 0) candidates[[1]] else NA_character_
+}
+
+find_package_root <- function(script_path) {
+  if (is.na(script_path) || !nzchar(script_path)) {
+    return(NULL)
+  }
+  root <- normalizePath(file.path(dirname(normalizePath(script_path)), ".."),
+                        mustWork = FALSE)
+  desc <- file.path(root, "DESCRIPTION")
+  if (!file.exists(desc)) {
+    return(NULL)
+  }
+  pkg <- tryCatch(unname(read.dcf(desc)[1, "Package"]), error = function(e) NA_character_)
+  if (!identical(pkg, "fmrihrf")) {
+    return(NULL)
+  }
+  root
+}
+
+resolve_cli <- function() {
+  root <- find_package_root(script)
+
+  # Installed-wrapper path: prepend the library containing the package root.
+  if (!is.null(root)) {
+    lib_root <- dirname(root)
+    .libPaths(unique(c(lib_root, .libPaths())))
+  }
+
+  if (requireNamespace("fmrihrf", quietly = TRUE)) {
+    return(getExportedValue("fmrihrf", "fmrihrf_cli"))
+  }
+
+  # Source-checkout fallback: load the package from the wrapper's repo root.
+  if (!is.null(root) && requireNamespace("pkgload", quietly = TRUE)) {
+    suppressPackageStartupMessages(suppressWarnings(
+      pkgload::load_all(root, export_all = FALSE, helpers = FALSE, quiet = TRUE)
+    ))
+    package_env <- if ("package:fmrihrf" %in% search()) {
+      as.environment("package:fmrihrf")
+    } else {
+      asNamespace("fmrihrf")
+    }
+    if (exists("fmrihrf_cli", envir = package_env, inherits = FALSE)) {
+      return(get("fmrihrf_cli", envir = package_env, inherits = FALSE))
+    }
+  }
+
+  stop("could not load fmrihrf; install the package or run from a source checkout with pkgload available")
+}
+
+status <- tryCatch(
+  resolve_cli()(commandArgs(trailingOnly = TRUE)),
+  error = function(e) {
+    message("fmrihrf: ", conditionMessage(e))
+    2L
+  }
+)
+
+quit(save = "no", status = as.integer(status))

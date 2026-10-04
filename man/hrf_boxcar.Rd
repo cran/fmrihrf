@@ -12,9 +12,9 @@ hrf_boxcar(width, amplitude = 1, normalize = FALSE)
 \item{amplitude}{Height of the boxcar (default: 1).}
 
 \item{normalize}{Logical; if \code{TRUE}, the boxcar is scaled so that its
-integral equals 1 (i.e., amplitude = 1/width). This makes the regression
-coefficient interpretable as the mean signal in the window.
-Default is \code{FALSE}.}
+integral equals 1 (i.e., amplitude = 1/width), so the regression
+coefficient estimates the integrated signal in the window rather than its
+mean. Default is \code{FALSE}.}
 }
 \value{
 An HRF object that can be used with \code{regressor()} and other
@@ -26,9 +26,11 @@ window starting at t=0 and zero outside. Unlike traditional HRFs, this has
 no hemodynamic delay - it represents an instantaneous response.
 }
 \details{
-When used in a GLM, the estimated coefficient represents a (weighted) average
-of the data within the specified time window. If \code{normalize = TRUE}, the
-coefficient directly estimates the mean signal in that window.
+In a least-squares GLM, an isolated event's coefficient for a boxcar of
+amplitude 1 estimates the mean signal in the window. With
+\code{normalize = TRUE} the boxcar has unit area (amplitude
+\code{1/width}), so the coefficient estimates the integrated signal over
+the window (the mean multiplied by \code{width}).
 
 For delayed windows (not starting at t=0), use \code{\link{lag_hrf}} to shift
 the boxcar in time.
@@ -52,9 +54,9 @@ hrf1 <- hrf_boxcar(width = 5)
 t <- seq(-1, 10, by = 0.1)
 plot(t, evaluate(hrf1, t), type = "s", main = "Simple Boxcar HRF")
 
-# Normalized boxcar - coefficient will estimate mean signal in window
+# Unit-area boxcar: beta estimates the integrated signal over 0-5 s
+# (5 x the mean); with amplitude 1, beta estimates the mean itself
 hrf2 <- hrf_boxcar(width = 5, normalize = TRUE)
-# integral is now 1, so beta estimates mean(Y[0:5])
 
 # Use in a regressor with trial-varying widths
 hrf_short <- hrf_boxcar(width = 4, normalize = TRUE)

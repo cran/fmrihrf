@@ -11,8 +11,12 @@
 #'   * `summate`: Logical indicating if overlapping HRF responses should summate.
 #'   * `filtered_all`: Logical attribute set to `TRUE` when all events were
 #'     removed due to zero or `NA` amplitudes.
+#'   * `drop_zero_amplitude`: If `TRUE` (default), events with amplitude 0 are
+#'     removed. `feature_regressor()` sets this to `FALSE` so a sampled feature
+#'     grid is preserved, including silent bins.
 #' @importFrom assertthat assert_that
-Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate=TRUE) {
+Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40,
+                summate=TRUE, drop_zero_amplitude=TRUE) {
 
   # Initial conversions
   onsets    <- as.numeric(onsets)
@@ -21,6 +25,9 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
 
   assert_that(is.logical(summate), length(summate) == 1)
   summate   <- as.logical(summate)
+  assert_that(is.logical(drop_zero_amplitude), length(drop_zero_amplitude) == 1,
+              !is.na(drop_zero_amplitude))
+  drop_zero_amplitude <- isTRUE(drop_zero_amplitude)
   span_arg  <- as.numeric(span) # Store original arg
 
   # Handle NA onset case explicitly (represents intent for zero events)
@@ -81,21 +88,25 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
 
   # Filter events based on non-zero and non-NA amplitude
   if (n_onsets > 0) {
-      keep_indices <- which(amplitude != 0 & !is.na(amplitude))
-      # Store whether filtering occurred
-      filtered_some <- length(keep_indices) < n_onsets
-      # Store whether *all* were filtered
-      filtered_all <- length(keep_indices) == 0
+      if (drop_zero_amplitude) {
+          keep_indices <- which(amplitude != 0 & !is.na(amplitude))
+          # Store whether filtering occurred
+          filtered_some <- length(keep_indices) < n_onsets
+          # Store whether *all* were filtered
+          filtered_all <- length(keep_indices) == 0
 
-      if (filtered_some) {
-          onsets    <- onsets[keep_indices]
-          duration  <- duration[keep_indices]
-          amplitude <- amplitude[keep_indices]
-          # Also filter HRF list if applicable
-          if (hrf_is_list) {
-            hrf <- hrf[keep_indices]
+          if (filtered_some) {
+              onsets    <- onsets[keep_indices]
+              duration  <- duration[keep_indices]
+              amplitude <- amplitude[keep_indices]
+              # Also filter HRF list if applicable
+              if (hrf_is_list) {
+                hrf <- hrf[keep_indices]
+              }
+              n_onsets  <- length(onsets) # Update count after filtering
           }
-          n_onsets  <- length(onsets) # Update count after filtering
+      } else {
+          filtered_all <- FALSE
       }
   } else {
       filtered_all <- TRUE # If input was empty, effectively all are filtered
@@ -166,6 +177,9 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
 #'   with the duration of sustained events (via weighted integration). If `FALSE`,
 #'   weighted integration is normalized by total block weight so amplitude does
 #'   not grow with duration.
+#' @param drop_zero_amplitude Logical scalar; if `TRUE` (default), remove
+#'   zero-amplitude events. Set to `FALSE` to retain all supplied onsets,
+#'   including zero-valued samples in a continuous feature series.
 #'
 #' @details
 #' This function serves as the main public interface for creating regressor objects.
@@ -173,7 +187,7 @@ Reg <- function(onsets, hrf=HRF_SPMG1, duration=0, amplitude=1, span=40, summate
 #' efficient storage. The resulting object can be evaluated at specific time points
 #' using the `evaluate()` function.
 #'
-#' Events with an amplitude of 0 are automatically filtered out.
+#' Events with an amplitude of 0 are filtered out when `drop_zero_amplitude = TRUE`.
 #'
 #' ## Trial-Varying HRFs
 #'

@@ -99,12 +99,13 @@ test_that("evaluate.Reg computes convolution correctly", {
 })
 
 
-test_that("Rconv handles non-zero constant durations", {
+test_that("deprecated Rconv method warns and routes to conv", {
   reg <- regressor(onsets = c(0, 2), duration = 2, amplitude = c(1, 1),
                    hrf = BOX_HRF, span = 1)
   grid <- 0:6
   res_conv <- evaluate(reg, grid, method = "conv", precision = 1)
-  res_rconv <- evaluate(reg, grid, method = "Rconv", precision = 1)
+  expect_warning(res_rconv <- evaluate(reg, grid, method = "Rconv", precision = 1),
+                 "deprecated")
   expect_equal(res_rconv, res_conv)
 })
 

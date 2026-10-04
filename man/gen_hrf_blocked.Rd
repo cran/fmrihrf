@@ -34,7 +34,10 @@ hrf_blocked(
 
 \item{half_life}{A numeric value specifying the half-life of the exponential decay function, used to model response attenuation. Default is `Inf`, which means no decay.}
 
-\item{summate}{Logical; if TRUE (default), responses accumulate (peak grows with duration). If FALSE, the convolution is averaged so the temporal profile is preserved but peak amplitude does not grow with duration.}
+\item{summate}{Logical; if TRUE (default), integrate responses over the block.
+If FALSE, divide by the block width to obtain a temporal average.
+Averaging does not fix the peak height: longer blocks can have smaller peaks.
+Use `normalize = TRUE` for unit-peak scaling.}
 
 \item{normalize}{A logical value indicating whether to rescale the output so that the peak of the output is 1. Default is `FALSE`.}
 

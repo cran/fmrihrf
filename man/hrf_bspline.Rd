@@ -9,19 +9,27 @@ hrf_bspline(t, span = 24, N = 5, degree = 3, ...)
 \arguments{
 \item{t}{A vector of time points.}
 
-\item{span}{A numeric value representing the temporal window over which the basis set spans. Default value is 20.}
+\item{span}{A numeric value representing the temporal window over which the basis set spans. Default value is 24.}
 
-\item{N}{An integer representing the number of basis functions. Default value is 5.}
+\item{N}{An integer representing the number of basis functions. Must be at
+least \code{degree - 1}. Default value is 5.}
 
 \item{degree}{An integer representing the degree of the spline. Default value is 3.}
 
-\item{...}{Additional arguments passed to `splines::bs`.}
+\item{...}{Further arguments passed to \code{\link[splines]{bs}}
+(\code{intercept}, \code{df} and \code{knots} are set internally and
+ignored if supplied).}
 }
 \value{
 A matrix representing the B-spline basis for the HRF at the given time points `t`.
 }
 \description{
-The `hrf_bspline` function computes the B-spline representation of an HRF (hemodynamic response function) at given time points `t`.
+The `hrf_bspline` function computes a B-spline basis for an HRF at time
+points `t`. The `N` basis functions are the interior functions of a clamped
+B-spline basis on \code{[0, span]} with evenly spaced knots: the functions
+anchored at the two boundaries are dropped, so every basis function (and
+therefore every fitted HRF) is zero at onset and at the end of the span.
+Outside \code{[0, span]} the basis is zero.
 }
 \examples{
 # Compute the B-spline HRF representation for time points from 0 to 20 with 0.5 increments

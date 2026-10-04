@@ -1,28 +1,26 @@
-params <-
-list(family = "red", preset = "homage")
-
-## ----setup, include = FALSE---------------------------------------------------
-if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
+## ----setup, include = FALSE--------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 7, 
-  fig.height = 5,
+  # Sharper website figures; keep the CRAN vignette archive compact.
+  fig.retina = if (identical(Sys.getenv("IN_PKGDOWN"), "true")) 2 else 1,
+  fig.width = 7,
+  fig.height = 4,
   message = FALSE,
   warning = FALSE
 )
+# CRAN builds: skip dark-mode figure twins to keep the source package small;
+# the pkgdown site (IN_PKGDOWN = "true") keeps them.
+if (!identical(Sys.getenv("IN_PKGDOWN"), "true")) {
+  options(albersdown.dark_figures = FALSE)
+}
 library(fmrihrf)
 library(dplyr)
 library(ggplot2)
 library(tidyr)
 library(Matrix)
-if (requireNamespace("viridis", quietly = TRUE)) {
-  library(viridis)
-} else {
-  scale_color_viridis_d <- function(...) ggplot2::scale_color_brewer(palette = "Set1")
-}
 
-## ----gamma_library------------------------------------------------------------
+## ----gamma_library, fig.height=6, fig.alt="Nine gamma HRFs grouped into panels by shape (4, 6, 8), with rate (0.8, 1, 1.2) distinguished by color. Higher rates peak earlier and higher; all panels share the same axes."----
 # Define parameter grid for gamma HRFs
 gamma_params <- expand.grid(
   shape = c(4, 6, 8),
@@ -46,23 +44,28 @@ gamma_responses <- gamma_lib(time_points)
 
 # Convert to long format for plotting
 gamma_df <- as.data.frame(gamma_responses)
-names(gamma_df) <- paste0("Shape", gamma_params$shape, "_Rate", gamma_params$rate)
+names(gamma_df) <- with(gamma_params, paste(shape, rate, sep = " / "))
 gamma_df$Time <- time_points
 
 gamma_long <- pivot_longer(gamma_df, -Time, names_to = "Parameters", values_to = "Response")
+gamma_long <- gamma_long %>%
+  separate(Parameters, into = c("Shape", "Rate"), sep = " / ", remove = FALSE) %>%
+  mutate(Shape = factor(Shape, levels = c("4", "6", "8")),
+         Rate = factor(Rate, levels = c("0.8", "1", "1.2")))
 
-# Create a more informative plot
-ggplot(gamma_long, aes(x = Time, y = Response, color = Parameters)) +
-  geom_line(linewidth = 1) +
-  scale_color_viridis_d() +
-  labs(title = "Library of Gamma HRFs",
-       subtitle = "Systematic variation of shape and rate parameters",
-       x = "Time (seconds)",
-       y = "HRF Response") +
-  theme_minimal() +
-  theme(legend.position = "right")
+# One panel per shape; rate (an ordered parameter) uses the ordered palette
+ggplot(gamma_long, aes(x = Time, y = Response, color = Rate)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_line(linewidth = 0.9) +
+  facet_wrap(~Shape, ncol = 1, labeller = label_both) +
+  scale_colour_hrf("ordered") +
+  scale_y_continuous(breaks = c(0, 0.2)) +
+  labs(title = "Gamma HRF library", subtitle = "Peak time = (shape - 1) / rate",
+       x = "Time (s)", y = "Response", color = "Rate") +
+  theme(legend.position = "bottom", legend.justification = "left",
+        strip.text = element_text(hjust = 0), plot.title.position = "plot")
 
-## ----spm_lag_library----------------------------------------------------------
+## ----spm_lag_library, fig.alt="Seven SPM canonical HRFs lagged from -2 to +4 seconds in 1 second steps, coloured from violet (earliest) to ochre (latest). The shapes are identical and evenly spaced in time."----
 # Parameter grid for temporal lags
 lag_params <- data.frame(lag = seq(-2, 4, by = 1))
 print(lag_params)
@@ -75,146 +78,104 @@ create_lagged_spm <- function(lag) {
 spm_lag_lib <- hrf_library(create_lagged_spm, lag_params)
 print(spm_lag_lib)
 
-# Evaluate and plot
-spm_lag_responses <- spm_lag_lib(time_points)
-spm_lag_df <- as.data.frame(spm_lag_responses)
-names(spm_lag_df) <- paste0("Lag_", lag_params$lag, "s")
-spm_lag_df$Time <- time_points
+# The library is a basis set: one column per lag
+plot_hrfs(spm_lag_lib, time = time_points,
+          labels = sprintf("%+d s", lag_params$lag), palette = "ordered",
+          title = "Library of lagged SPM canonical HRFs",
+          subtitle = "Lags from -2 to +4 s")
 
-spm_lag_long <- pivot_longer(spm_lag_df, -Time, names_to = "Lag", values_to = "Response")
-
-ggplot(spm_lag_long, aes(x = Time, y = Response, color = Lag)) +
-  geom_line(linewidth = 1) +
-  scale_color_viridis_d() +
-  labs(title = "Library of Lagged SPM Canonical HRFs",
-       subtitle = "Temporal lags from -2 to +4 seconds",
-       x = "Time (seconds)",
-       y = "HRF Response") +
-  theme_minimal()
-
-## ----reconstruction_demo------------------------------------------------------
-# Use a small basis for clear visualization
-basis_set <- gen_hrf(hrf_bspline, N = 5, degree = 3, span = 30)
-eval_times <- seq(0, 30, by = 0.1)
+## ----reconstruction_demo-----------------------------------------
+# Ten cubic B-splines with 24-second support
+basis_set <- hrf_bspline_generator(nbasis = 10, span = 24)
+eval_times <- seq(0, 24, by = 0.1)
 
 # The reconstruction matrix: each column is a basis function evaluated at time points
-recon_matrix <- basis_set(eval_times)
-print(paste("Reconstruction matrix dimensions:", nrow(recon_matrix), "time points x", 
-            ncol(recon_matrix), "basis functions"))
+recon_matrix <- reconstruction_matrix(basis_set, eval_times)
+dim(recon_matrix)
 
-# Let's visualize the basis functions themselves first
-basis_df <- as.data.frame(recon_matrix)
-names(basis_df) <- paste0("B", 1:5)
-basis_df$Time <- eval_times
+## ----reconstruction_basis, fig.alt="Ten cubic B-spline basis functions on 0 to 24 seconds, labelled B1 to B10 at their peaks and coloured from violet (early) to ochre (late)."----
+plot_hrfs(basis_set, time = eval_times,
+          title = "Cubic B-spline basis, N = 10",
+          subtitle = "24 s span; each function covers part of it")
 
-basis_long <- pivot_longer(basis_df, -Time, names_to = "Basis", values_to = "Value")
-
-ggplot(basis_long, aes(x = Time, y = Value, color = Basis)) +
-  geom_line(linewidth = 1.2) +
-  scale_color_viridis_d(option = "turbo") +
-  labs(title = "B-spline Basis Functions",
-       subtitle = "Each basis function covers a different time window",
-       x = "Time (seconds)",
-       y = "Basis Function Value") +
-  theme_minimal()
-
-# Now demonstrate reconstruction with different coefficient patterns
-coefficient_sets <- list(
-  "Early Peak" = c(0.2, 1.0, 0.3, 0.0, 0.0),
-  "Canonical" = c(0.0, 0.3, 1.0, 0.4, -0.1),
-  "Late Peak" = c(0.0, 0.0, 0.3, 1.0, 0.2),
-  "Double Peak" = c(0.0, 0.8, 0.2, 0.9, 0.0)
+## ----reconstruction_fit------------------------------------------
+targets <- list(
+  "Canonical" = HRF_SPMG1,
+  "Delayed" = lag_hrf(HRF_SPMG1, 3),      # canonical, 3 s later
+  "Sustained" = block_hrf(HRF_SPMG1, width = 6, normalize = TRUE)  # 6 s event
 )
+fits <- lapply(targets, function(h) {
+  y <- h(eval_times)
+  y <- y / max(y)                       # unit peak
+  w <- qr.solve(recon_matrix, y)        # least-squares weights
+  list(weights = w, fitted = drop(recon_matrix %*% w), target = y)
+})
 
-# Reconstruct HRFs for each coefficient set
-reconstruction_df <- data.frame()
-for (name in names(coefficient_sets)) {
-  coefs <- coefficient_sets[[name]]
-  hrf_values <- as.vector(recon_matrix %*% coefs)
-  
-  df <- data.frame(
-    Time = eval_times,
-    HRF = hrf_values,
-    Pattern = name
+# Fit quality (R^2) for each target
+sapply(fits, function(f) {
+  1 - sum((f$target - f$fitted)^2) / sum((f$target - mean(f$target))^2)
+})
+
+canonical_coefs <- fits[["Canonical"]]$weights
+round(canonical_coefs, 2)
+
+## ----reconstruction_components, fig.height = 4.4, fig.alt="Three panels for the canonical, delayed and sustained targets. In each, thin grey curves are the ten basis functions scaled by their weights, a thick coloured curve is their sum, and a dashed curve is the target. The canonical sum peaks at 5 seconds, the delayed at 8 seconds, and the sustained around 8 seconds with a broader peak."----
+component_df <- do.call(rbind, lapply(names(fits), function(nm) {
+  w <- fits[[nm]]$weights
+  data.frame(
+    Time = rep(eval_times, length(w)),
+    Value = as.vector(sweep(recon_matrix, 2, w, `*`)),
+    Basis = factor(rep(paste0("B", seq_along(w)), each = length(eval_times)),
+                   levels = paste0("B", seq_along(w))),
+    Target = nm
   )
-  reconstruction_df <- rbind(reconstruction_df, df)
-}
+}))
+sum_df <- do.call(rbind, lapply(names(fits), function(nm) {
+  data.frame(Time = eval_times, Value = fits[[nm]]$fitted,
+             Target_value = fits[[nm]]$target, Target = nm)
+}))
+component_df$Target <- factor(component_df$Target, levels = names(fits))
+sum_df$Target <- factor(sum_df$Target, levels = names(fits))
 
-ggplot(reconstruction_df, aes(x = Time, y = HRF, color = Pattern)) +
-  geom_line(linewidth = 1.5) +
-  scale_color_manual(values = c("Early Peak" = "#E69F00", 
-                               "Canonical" = "#009E73",
-                               "Late Peak" = "#0072B2",
-                               "Double Peak" = "#D55E00")) +
-  labs(title = "Different HRF Shapes from Same Basis Set",
-       subtitle = "Varying coefficients produces diverse HRF patterns",
-       x = "Time (seconds)",
-       y = "HRF Response") +
-  theme_minimal() +
-  theme(legend.position = "bottom")
+ggplot(component_df, aes(Time, Value)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_line(aes(group = Basis), colour = "grey60", linewidth = 0.4) +
+  geom_line(data = sum_df, aes(colour = Target), linewidth = 1.1) +
+  geom_line(data = sum_df, aes(y = Target_value), colour = "grey15",
+            linewidth = 0.5, linetype = "22") +
+  facet_wrap(~Target, nrow = 1) +
+  scale_colour_hrf() +
+  scale_x_continuous(breaks = c(0, 10, 20)) +
+  scale_y_continuous(breaks = c(0, 0.5, 1)) +
+  labs(title = "Same basis, different weights",
+       subtitle = "Grey: weighted basis functions\nColour: their sum. Dashed: target",
+       x = "Time (s)", y = "Response / peak") +
+  theme(legend.position = "none", strip.text = element_text(hjust = 0),
+        plot.title.position = "plot")
 
-## ----reconstruction_interactive-----------------------------------------------
-# Let's build up a canonical HRF step by step
-canonical_coefs <- c(0.0, 0.3, 1.0, 0.4, -0.1)
+## ----reconstruction_coefficients, fig.height = 5.6, fig.alt="Lollipop charts of the ten basis weights for each target, coloured like the fitted curves above. The canonical fit puts its largest weight on B3, the delayed fit on B4, and the sustained fit on B3 to B5; later weights are small and mostly negative."----
+coef_df <- do.call(rbind, lapply(names(fits), function(nm) {
+  w <- fits[[nm]]$weights
+  data.frame(Basis = factor(paste0("B", seq_along(w)), levels = paste0("B", seq_along(w))),
+             Weight = w, Target = nm)
+}))
+coef_df$Target <- factor(coef_df$Target, levels = names(fits))
 
-# Create data for cumulative reconstruction
-cumulative_df <- data.frame()
-for (i in 1:5) {
-  # Zero out coefficients after position i
-  temp_coefs <- canonical_coefs
-  if (i < 5) temp_coefs[(i+1):5] <- 0
-  
-  # Calculate cumulative HRF
-  cumulative_hrf <- as.vector(recon_matrix %*% temp_coefs)
-  
-  # Store individual contribution
-  individual_coefs <- rep(0, 5)
-  individual_coefs[i] <- canonical_coefs[i]
-  individual_contribution <- as.vector(recon_matrix %*% individual_coefs)
-  
-  df <- data.frame(
-    Time = rep(eval_times, 2),
-    Value = c(cumulative_hrf, individual_contribution),
-    Type = rep(c("Cumulative", "Individual"), each = length(eval_times)),
-    Step = i,
-    Basis = paste0("Adding B", i, " (coef=", round(canonical_coefs[i], 2), ")")
-  )
-  cumulative_df <- rbind(cumulative_df, df)
-}
+coef_df$Index <- as.integer(coef_df$Basis)
+ggplot(coef_df, aes(Index, Weight, colour = Target)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_segment(aes(xend = Index, y = 0, yend = Weight), linewidth = 0.9) +
+  geom_point(size = 2.2) +
+  facet_wrap(~Target, ncol = 1) +
+  scale_colour_hrf() +
+  scale_x_continuous(breaks = 1:10, minor_breaks = NULL) +
+  scale_y_continuous(breaks = c(0, 1)) +
+  labs(title = "Basis weights for each target", x = "Basis function (B1-B10)",
+       y = "Weight") +
+  theme(legend.position = "none", strip.text = element_text(hjust = 0),
+        plot.title.position = "plot")
 
-# Create faceted plot showing the build-up
-ggplot(cumulative_df, aes(x = Time, y = Value, color = Type)) +
-  geom_line(linewidth = 1.2) +
-  facet_wrap(~Basis, ncol = 5) +
-  scale_color_manual(values = c("Cumulative" = "black", "Individual" = "red")) +
-  labs(title = "Building an HRF: Sequential Addition of Weighted Basis Functions",
-       subtitle = "Red: individual contribution, Black: cumulative sum",
-       x = "Time (seconds)",
-       y = "Value") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        strip.text = element_text(size = 9))
-
-# Show coefficient importance
-coef_importance <- data.frame(
-  Basis = paste0("B", 1:5),
-  Coefficient = canonical_coefs,
-  `Absolute Value` = abs(canonical_coefs)
-)
-
-ggplot(coef_importance, aes(x = Basis, y = Coefficient, fill = Coefficient > 0)) +
-  geom_col() +
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
-  scale_fill_manual(values = c("FALSE" = "#D55E00", "TRUE" = "#009E73"),
-                    labels = c("Negative", "Positive")) +
-  labs(title = "Coefficient Values for Canonical HRF",
-       subtitle = "B3 dominates the shape, B5 provides the undershoot",
-       x = "Basis Function",
-       y = "Coefficient Value",
-       fill = "Sign") +
-  theme_minimal()
-
-## ----regressor_set_demo-------------------------------------------------------
+## ----regressor_set_demo------------------------------------------
 # Simulate a 3-condition experiment
 set.seed(123)
 n_events_per_condition <- 8
@@ -240,44 +201,14 @@ design_matrix <- evaluate(reg_set, scan_times)
 
 print(dim(design_matrix)) # Time points x 3 conditions
 
-# Visualize the design matrix
-design_df <- as.data.frame(design_matrix)
-names(design_df) <- c("TaskA", "TaskB", "TaskC")
-design_df$Time <- scan_times
+## ----regressor_set_plot, fig.height = 5, fig.alt="Three stacked panels, one per condition, each showing that condition's predicted BOLD response over 240 seconds with its eight event onsets marked below. Closely spaced events produce larger, merged responses."----
+plot_regressors(reg_set, grid = seq(0, total_duration, by = 0.1),
+                layout = "stack", scales = "fixed",
+                title = "Multi-condition design",
+                subtitle = "8 random onsets per condition")
 
-design_long <- pivot_longer(design_df, -Time, names_to = "Condition", values_to = "Response")
-
-ggplot(design_long, aes(x = Time, y = Response, color = Condition)) +
-  geom_line(linewidth = 1) +
-  scale_color_viridis_d() +
-  labs(title = "Multi-Condition fMRI Design Matrix",
-       subtitle = "Three experimental conditions with shared HRF",
-       x = "Time (seconds)",
-       y = "Predicted BOLD Response",
-       color = "Condition") +
-  theme_minimal()
-
-# Add event markers
-onset_df <- data.frame(
-  Time = all_onsets,
-  Condition = conditions,
-  Marker = 1
-)
-
-ggplot(design_long, aes(x = Time, y = Response, color = Condition)) +
-  geom_line(linewidth = 1) +
-  geom_point(data = onset_df, aes(x = Time, y = -0.1, color = Condition), 
-             size = 2, alpha = 0.7) +
-  scale_color_viridis_d() +
-  labs(title = "Design Matrix with Event Onsets",
-       subtitle = "Points show stimulus onset times",
-       x = "Time (seconds)",
-       y = "Predicted BOLD Response",
-       color = "Condition") +
-  theme_minimal()
-
-## ----regressor_design_demo----------------------------------------------------
-# Create a sampling frame for 2 blocks of 120 seconds each
+## ----regressor_design_demo, fig.height = 4.4, fig.alt="Faces and Houses responses in two stacked panels across two 240-second blocks, with points at the 2 second scan samples. A dashed line marks the block boundary at 240 seconds; each block has its own event schedule."----
+# Create a sampling frame for 2 blocks of 120 scans (240 s) each
 sframe <- sampling_frame(
   blocklens = c(120, 120),  # Two 4-minute blocks (120 scans each at TR = 2s)
   TR = 2                    # 2-second TR
@@ -303,28 +234,38 @@ design_mat <- regressor_design(
 
 print(dim(design_mat)) # Total time points across both blocks x 2 conditions
 
-# Convert to data frame for plotting
-# Use global=TRUE to get continuous time across blocks
-time_points <- samples(sframe, global = TRUE)
-design_plot_df <- as.data.frame(design_mat)
-names(design_plot_df) <- c("Faces", "Houses")
-design_plot_df$Time <- time_points
-design_plot_df$Block <- rep(1:2, each = 120) # 120 scans per block
+# The same design on a 0.1 s grid shows the continuous responses; the design
+# matrix itself is those responses sampled once per scan (TR = 2 s).
+sframe_fine <- sampling_frame(blocklens = c(2400, 2400), TR = 0.1, precision = 0.05)
+design_fine <- regressor_design(onsets = block_onsets, fac = event_conditions,
+                                block = block_ids, sframe = sframe_fine, hrf = HRF_SPMG1)
+fine_df <- data.frame(Time = rep(samples(sframe_fine, global = TRUE), 2),
+                      Response = as.vector(design_fine),
+                      Condition = rep(c("Faces", "Houses"), each = nrow(design_fine)))
+scan_df <- data.frame(Time = rep(samples(sframe, global = TRUE), 2),
+                      Response = as.vector(design_mat),
+                      Condition = rep(c("Faces", "Houses"), each = nrow(design_mat)))
+scan_df <- scan_df[abs(scan_df$Response) > 0.01, ]   # samples during responses
+# Highest scan sample in each block, labelled on the Faces panel
+peak_df <- do.call(rbind, lapply(split(scan_df[scan_df$Condition == "Faces", ],
+                                       scan_df$Time[scan_df$Condition == "Faces"] > 240),
+                                 function(d) d[which.max(d$Response), ]))
 
-design_plot_long <- pivot_longer(design_plot_df, c("Faces", "Houses"),
-                                names_to = "Condition", values_to = "Response")
-
-# Plot with block separation (block boundary at 240 seconds)
-ggplot(design_plot_long, aes(x = Time, y = Response, color = Condition)) +
-  geom_line(linewidth = 1) +
-  geom_vline(xintercept = 240, linetype = "dashed", alpha = 0.7) +
-  scale_color_viridis_d() +
-  labs(title = "Multi-Block Experimental Design",
-       subtitle = "Two blocks with different event schedules (dashed line = block boundary)",
-       x = "Time (seconds)",
-       y = "Predicted BOLD Response",
-       color = "Condition") +
-  theme_minimal()
+ggplot(fine_df, aes(Time, Response, colour = Condition)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_vline(xintercept = 240, colour = "grey45", linetype = "dashed") +
+  geom_line(linewidth = 0.7) +
+  geom_point(data = scan_df, size = 0.9) +
+  geom_text(data = peak_df, aes(label = sprintf("max %.3f", Response)),
+            hjust = -0.15, vjust = -0.4, size = 3, show.legend = FALSE) +
+  facet_wrap(~Condition, ncol = 1) +
+  scale_colour_hrf() +
+  scale_y_continuous(breaks = c(0, 0.15), expand = expansion(mult = c(0.05, 0.35))) +
+  labs(title = "Two-block design",
+       subtitle = "Points: scan samples (TR = 2 s)\nDashed line: start of block 2",
+       x = "Time (s)", y = "Predicted BOLD response") +
+  theme(legend.position = "none", strip.text = element_text(hjust = 0),
+        plot.title.position = "plot")
 
 # Show global vs block-relative timing
 timing_df <- data.frame(

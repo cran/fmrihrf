@@ -7,10 +7,11 @@ box_hrf_fun <- function(t) ifelse(t >= 0 & t <= 1, 1, 0)
 BOX_HRF <- as_hrf(box_hrf_fun, name = "box", span = 1)
 
 
-test_that("evaluate.Reg fft method matches conv", {
+test_that("deprecated fft method warns and routes to conv", {
   reg <- regressor(onsets = c(0, 2), hrf = BOX_HRF, span = 1)
   grid <- seq(0, 4, by = 0.5)
-  res_fft <- evaluate(reg, grid, method = "fft", precision = 0.1)
+  expect_warning(res_fft <- evaluate(reg, grid, method = "fft", precision = 0.1),
+                 "deprecated")
   res_conv <- evaluate(reg, grid, method = "conv", precision = 0.1)
   expect_equal(res_fft, res_conv, tolerance = 1e-6)
 })

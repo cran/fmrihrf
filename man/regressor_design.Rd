@@ -14,7 +14,7 @@ regressor_design(
   amplitude = 1,
   span = 40,
   precision = 0.33,
-  method = c("conv", "fft", "Rconv", "loop"),
+  method = c("conv", "loop", "fft", "Rconv"),
   sparse = FALSE,
   summate = TRUE
 )

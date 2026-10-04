@@ -2,35 +2,30 @@
 % Please edit documentation in R/hrf_decorators.R
 \name{normalise_hrf}
 \alias{normalise_hrf}
-\title{Normalise an HRF Object}
+\title{Normalise Each Basis of an HRF to Unit Peak}
 \usage{
 normalise_hrf(hrf)
 }
 \arguments{
-\item{hrf}{The HRF object (of class `HRF`) to normalise.}
+\item{hrf}{An object of class `HRF`.}
 }
 \value{
-A new HRF object representing the normalised function.
+A unit-peak `HRF` object.
 }
 \description{
-Creates a new HRF object whose output is scaled such that the maximum absolute
-value of the response is 1.
-}
-\details{
-For multi-basis HRFs, each basis function (column) is normalised independently.
+Back-compatible spelling and behavior for independently peak-normalizing
+every basis column. New code can use
+`normalize_hrf(hrf, "unit_peak_per_basis")` explicitly.
 }
 \examples{
-# Create a gaussian HRF with a peak value != 1
-gauss_unnorm <- as_hrf(function(t) 5 * dnorm(t, 6, 2), name="unnorm_gauss")
-# Normalise it
+gauss_unnorm <- as_hrf(function(t) 5 * dnorm(t, 6, 2), name = "unnorm_gauss")
 gauss_norm <- normalise_hrf(gauss_unnorm)
-t_vals <- seq(0, 20, by = 0.1)
-max(gauss_unnorm(t_vals)) # Peak is > 1
-max(gauss_norm(t_vals))   # Peak is 1
+max(gauss_norm(seq(0, 20, by = 0.1)))
 }
 \seealso{
 Other HRF_decorator_functions: 
 \code{\link{block_hrf}()},
-\code{\link{lag_hrf}()}
+\code{\link{lag_hrf}()},
+\code{\link{normalize_hrf}()}
 }
 \concept{HRF_decorator_functions}

@@ -16,7 +16,9 @@ hrf_weighted(
 \item{weights}{Numeric vector of weights. Required.}
 
 \item{width}{Total duration of the window in seconds. If provided without
-\code{times}, weights are evenly spaced from 0 to \code{width}.}
+\code{times}, \code{[0, width)} is divided into \code{length(weights)}
+equal bins (constant method), or the weights are placed at evenly spaced
+points from 0 to \code{width} (linear method).}
 
 \item{times}{Numeric vector of time points (in seconds, relative to t=0) where
 weights are specified. Must be strictly increasing and start at 0 for
@@ -24,17 +26,20 @@ consistency with other HRFs. If provided, \code{width} is ignored.}
 
 \item{method}{Interpolation method between time points:
 \describe{
-  \item{"constant"}{Step function - weight is constant until the next time
-    point (default). Good for discrete time bins.
+  \item{"constant"}{Step function (default): each weight applies to one
+    time bin. With \code{times}, weight \code{i} covers
+    \code{[times[i], times[i + 1])} and the last weight covers a bin as
+    wide as the one before it. Every weight is used.
   }
   \item{"linear"}{Linear interpolation between points. Good for smooth
     weight transitions.
   }
 }}
 
-\item{normalize}{Logical; if \code{TRUE}, weights are scaled so they sum to 1
-(for \code{method = "constant"}) or integrate to 1 (for \code{method = "linear"}).
-This makes the regression coefficient interpretable as a weighted mean.
+\item{normalize}{Logical; if \code{TRUE}, weights are scaled so all of them
+sum to 1 (for \code{method = "constant"}) or the curve integrates to 1
+(for \code{method = "linear"}). This fixes the scale of the weight
+profile; see Details for what the regression coefficient estimates.
 Default is \code{FALSE}.}
 }
 \value{
@@ -47,14 +52,21 @@ Unlike traditional HRFs, this has no built-in hemodynamic delay - it directly
 maps weights to time points, allowing for arbitrary temporal response shapes.
 }
 \details{
-This is useful for extracting weighted averages of data at specific time points.
-When \code{normalize = TRUE} and the HRF is used in a GLM, the estimated
-coefficient represents a weighted mean of the data at the specified times.
+This is useful for summarising the signal in chosen post-stimulus windows
+with a chosen temporal profile. In a least-squares GLM, an isolated event's
+coefficient is the amplitude of the weight profile \eqn{w(t)} that best
+matches the data, \eqn{\sum_t w(t) y(t) / \sum_t w(t)^2}. This equals the
+mean signal in the window only when all non-zero weights are 1 (a boxcar);
+in general it is not a weighted mean. Normalizing rescales the coefficient
+but does not change this.
 
 There are two ways to specify the temporal structure:
 \enumerate{
-  \item \code{width + weights}: Weights are evenly spaced from 0 to \code{width}
-  \item \code{times + weights}: Explicit time points for each weight (relative to t=0)
+  \item \code{width + weights}: the window \code{[0, width)} is divided
+    into \code{length(weights)} equal bins (constant method) or the weights
+    are placed at evenly spaced points from 0 to \code{width} (linear method)
+  \item \code{times + weights}: explicit time points for each weight
+    (relative to t=0)
 }
 
 For delayed windows (not starting at t=0), use \code{\link{lag_hrf}} to shift
@@ -75,7 +87,7 @@ reg <- regressor(onsets = c(0, 20), hrf = list(hrf_early, hrf_late))
 }
 
 \examples{
-# Simple: 6s window with 4 evenly-spaced weights (at 0, 2, 4, 6s)
+# Simple: 6 s window split into 4 bins of 1.5 s (starting at 0, 1.5, 3, 4.5 s)
 hrf1 <- hrf_weighted(width = 6, weights = c(0.2, 0.5, 0.8, 0.3))
 t <- seq(-1, 10, by = 0.1)
 plot(t, evaluate(hrf1, t), type = "s", main = "Weighted HRF (width + weights)")
@@ -88,7 +100,7 @@ hrf2 <- hrf_weighted(
 )
 plot(t, evaluate(hrf2, t), type = "l", main = "Smooth Weighted HRF")
 
-# Normalized weights - coefficient estimates weighted mean of signal
+# Normalized weights: all four bin weights sum to 1
 hrf3 <- hrf_weighted(
   width = 8,
   weights = c(1, 2, 2, 1),

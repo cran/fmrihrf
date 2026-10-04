@@ -5,11 +5,11 @@ library(testthat)
 # Verify Reg error handling
 
 test_that("Reg validates inputs", {
-  expect_error(Reg(onsets = -1), "onsets")
-  expect_error(Reg(onsets = c(0, NA)), "onsets")
-  expect_error(Reg(onsets = 1, span = 0), "span")
-  expect_error(Reg(onsets = c(0,1), duration = c(1,2,3)), "duration")
-  expect_error(Reg(onsets = c(0,1), amplitude = c(1,2,3)), "amplitude")
+  expect_error(fmrihrf:::Reg(onsets = -1), "onsets")
+  expect_error(fmrihrf:::Reg(onsets = c(0, NA)), "onsets")
+  expect_error(fmrihrf:::Reg(onsets = 1, span = 0), "span")
+  expect_error(fmrihrf:::Reg(onsets = c(0,1), duration = c(1,2,3)), "duration")
+  expect_error(fmrihrf:::Reg(onsets = c(0,1), amplitude = c(1,2,3)), "amplitude")
 })
 
 # Verify single_trial_regressor construction and errors
@@ -28,4 +28,3 @@ test_that("single_trial_regressor validates lengths", {
   expect_error(single_trial_regressor(onsets = 1, duration = c(1,2)), "duration")
   expect_error(single_trial_regressor(onsets = 1, amplitude = c(1,2)), "amplitude")
 })
-

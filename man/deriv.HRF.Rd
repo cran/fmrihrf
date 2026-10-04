@@ -42,8 +42,8 @@ The first column contains the derivative of the canonical HRF, and the second
 column contains the second derivative (derivative of the temporal derivative).
 
 Returns derivatives for the canonical HRF and its two derivatives.
-Since SPMG3 already includes first and second derivatives as basis functions,
-this method returns their derivatives (1st, 2nd, and 3rd derivatives of the original HRF).
+Returns the first and second time derivatives of the canonical, followed by
+the time derivative of the dispersion basis.
 }
 \examples{
 t <- seq(0, 30, by = 0.5)

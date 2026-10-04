@@ -79,7 +79,7 @@ deriv.SPMG1_HRF <- function(x, t, ...) {
   params <- attr(x, "params")
   if (is.null(params)) {
     # Use defaults if params not found
-    params <- list(P1 = 5, P2 = 15, A1 = 0.0833)
+    params <- list(P1 = 5, P2 = 15, A1 = 1/120)
   }
   
   # Call the analytic derivative function
@@ -110,7 +110,7 @@ deriv.SPMG2_HRF <- function(x, t, ...) {
   
   if (is.null(params)) {
     # Use defaults if params not found
-    params <- list(P1 = 5, P2 = 15, A1 = 0.0833)
+    params <- list(P1 = 5, P2 = 15, A1 = 1/120)
   }
   
   # Create result matrix with 2 columns
@@ -129,8 +129,8 @@ deriv.SPMG2_HRF <- function(x, t, ...) {
 #' Derivative method for SPMG3 HRF
 #'
 #' Returns derivatives for the canonical HRF and its two derivatives.
-#' Since SPMG3 already includes first and second derivatives as basis functions,
-#' this method returns their derivatives (1st, 2nd, and 3rd derivatives of the original HRF).
+#' Returns the first and second time derivatives of the canonical, followed by
+#' the time derivative of the dispersion basis.
 #'
 #' @param x An SPMG3_HRF object
 #' @param t Numeric vector of time points at which to evaluate the derivative
@@ -149,7 +149,7 @@ deriv.SPMG3_HRF <- function(x, t, ...) {
   
   if (is.null(params)) {
     # Use defaults if params not found
-    params <- list(P1 = 5, P2 = 15, A1 = 0.0833)
+    params <- list(P1 = 5, P2 = 15, A1 = 1/120)
   }
   
   # Create result matrix with 3 columns
@@ -161,16 +161,9 @@ deriv.SPMG3_HRF <- function(x, t, ...) {
   # Second column: second derivative
   result[, 2] <- hrf_spmg1_second_deriv(t, P1 = params$P1, P2 = params$P2, A1 = params$A1)
   
-  # Third column: third derivative (use numerical differentiation of second derivative)
-  # Define function for second derivative
-  f_second_deriv <- function(time) {
-    hrf_spmg1_second_deriv(time, P1 = params$P1, P2 = params$P2, A1 = params$A1)
-  }
-  
-  # Compute third derivative numerically
-  for (i in seq_along(t)) {
-    result[i, 3] <- numDeriv::grad(f_second_deriv, t[i])
-  }
-  
+  # Third column: time derivative of the dispersion basis.
+  result[, 3] <- hrf_spmg1_dispersion_time_deriv(
+    t, P1 = params$P1, P2 = params$P2, A1 = params$A1)
+
   return(result)
 }

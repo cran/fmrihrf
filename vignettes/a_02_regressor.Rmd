@@ -2,35 +2,35 @@
 title: Building fMRI Regressors
 author: Bradley R. Buchsbaum
 date: '`r Sys.Date()`'
-output: rmarkdown::html_vignette
-vignette: >
+output:
+  albersdown::albers_vignette:
+    family: red
+    preset: interaction
+    toc: yes
+    toc_depth: 2.0
+
+vignette: |
   %\VignetteIndexEntry{Building fMRI Regressors}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-params:
-  family: red
-  preset: homage
-css: albers.css
-resource_files:
-- albers.css
-- albers.js
-includes:
-  in_header: |-
-    <script src="albers.js"></script>
-    <script>document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('palette-red');});</script>
-
 ---
 
 ```{r setup, include = FALSE}
-if (requireNamespace("ggplot2", quietly = TRUE)) ggplot2::theme_set(ggplot2::theme_minimal())
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
-  fig.width = 7, 
-  fig.height = 5,
+  # Sharper website figures; keep the CRAN vignette archive compact.
+  fig.retina = if (identical(Sys.getenv("IN_PKGDOWN"), "true")) 2 else 1,
+  fig.width = 7,
+  fig.height = 4,
   message = FALSE,
   warning = FALSE
 )
+# CRAN builds: skip dark-mode figure twins to keep the source package small;
+# the pkgdown site (IN_PKGDOWN = "true") keeps them.
+if (!identical(Sys.getenv("IN_PKGDOWN"), "true")) {
+  options(albersdown.dark_figures = FALSE)
+}
 library(fmrihrf)
 library(dplyr)
 library(ggplot2)
@@ -56,26 +56,72 @@ onsets <- seq(0, 10 * 12, by = 12)
 # Duration is 0 by default
 reg1 <- regressor(onsets = onsets, hrf = HRF_SPMG1)
 
-# Print the regressor object to see its properties (uses new print.Reg method)
-print(reg1)
-
 # Access components using helper functions
 head(onsets(reg1))
 nbasis(reg1)
+```
+
+The regressor is the convolution of the event train with the HRF. Each event
+contributes one copy of the HRF, starting at its onset, and overlapping copies
+add up. Here the next event arrives while the previous response is still in
+its undershoot, so every peak after the first is slightly lower. Each copy is
+added only over the HRF's `span` (24 s for `HRF_SPMG1`), so where the
+undershoot is cut off there is a tiny step, about 1.5% of the peak, visible
+on fine grids.
+
+Throughout these vignettes, grey marks inputs, events and reference curves,
+and coloured lines are HRFs or regressors. The one exception: when regressors
+with different events share a panel (as in the shifted regressor below), each
+regressor's events are marked in its own colour.
+
+The HRF above is scaled to a peak of 1 to show its shape. Unscaled,
+`HRF_SPMG1` peaks at about 0.175, the height of the first regressor peak in the
+next figure (later peaks are about 0.16, lowered by the previous undershoot).
+
+```{r convolution_idea, echo = FALSE, fig.height = 4.6, fig.alt="Three stacked panels. Top: eleven unit event sticks every 12 seconds. Middle: the SPM canonical HRF over 24 seconds. Bottom: the regressor, the sum of one HRF copy per event, which rises and falls after each event and overlaps slightly with the next."}
+conv_grid <- seq(0, 150, by = 0.1)
+hrf_grid <- seq(0, 24, by = 0.1)
+conv_df <- rbind(
+  data.frame(time = rep(onsets, each = 3), value = rep(c(0, 1, NA), length(onsets)),
+             panel = "1. Events (onsets)"),
+  data.frame(time = hrf_grid, value = HRF_SPMG1(hrf_grid) / max(HRF_SPMG1(hrf_grid)),
+             panel = "2. HRF for one event (peak = 1)"),
+  data.frame(time = conv_grid, value = evaluate(reg1, conv_grid) / max(HRF_SPMG1(hrf_grid)),
+             panel = "3. Regressor = events convolved with HRF")
+)
+conv_df$panel <- factor(conv_df$panel, levels = unique(conv_df$panel))
+ggplot(conv_df, aes(time, value, colour = panel)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_line(aes(linetype = panel), linewidth = 0.9, na.rm = TRUE) +
+  scale_linetype_manual(values = c("solid", "22", "solid")) +
+  facet_wrap(~panel, ncol = 1, scales = "free_y") +
+  scale_colour_manual(values = c("grey45", "grey45", hrf_palette(1))) +
+  scale_y_continuous(breaks = c(0, 1)) +
+  labs(title = "From events to a regressor", x = "Time (s)", y = NULL) +
+  theme(legend.position = "none", strip.text = element_text(hjust = 0),
+        plot.title.position = "plot")
 ```
 
 ## Evaluating and Plotting a Regressor
 
 A `regressor` object stores the event information but doesn't automatically compute the timecourse. To get the predicted BOLD signal at specific time points (e.g., corresponding to scan acquisition times), we use the `evaluate()` function.
 
-```{r evaluate_plot_basic}
+```{r evaluate_basic}
 # Define a time grid corresponding to scan times (e.g., TR=2s)
 TR <- 2
 scan_times <- seq(0, 140, by = TR)
 
-# Plot the regressor using the plot() method
-# This automatically evaluates and plots with onset markers
-plot(reg1, grid = scan_times)
+# One value per scan
+head(evaluate(reg1, scan_times))
+```
+
+`plot_regressors()` draws the continuous prediction on a fine grid and, with `samples`, the values the model actually uses at each scan. Grey bars under the curve mark the events. (`plot(reg1)` gives a quick base-graphics view of the same regressor.)
+
+```{r evaluate_plot_basic, fig.alt="Modeled SPM response to eleven events spaced 12 seconds apart, drawn as a smooth curve with dots at the 2 second scan times. Grey bars below the curve mark the event onsets.", fig.cap="The curve is the modeled response; dots are its values at the scan times (TR = 2 s); grey bars mark event onsets."}
+plot_regressors(reg1, grid = seq(0, 140, by = 0.1), samples = scan_times,
+                labels = "SPMG1 regressor",
+                title = "Predicted response to 11 events",
+                subtitle = "Evaluated at every scan (TR = 2 s)")
 ```
 
 ## Varying Event Durations
@@ -89,28 +135,34 @@ durations_var <- 1:length(onsets_var_dur) # Durations increase from 1s to 6s
 
 # Create regressor with varying durations
 reg_var_dur <- regressor(onsets_var_dur, HRF_SPMG1, duration = durations_var)
-print(reg_var_dur)
 
-# Plot the regressor
 scan_times_dur <- seq(0, max(onsets_var_dur) + 30, by = TR)
-plot(reg_var_dur, grid = scan_times_dur)
+fine_grid_dur <- seq(0, max(scan_times_dur), by = 0.1)
+```
+
+The width of each grey bar is the event's duration. Longer events produce larger responses:
+
+```{r varying_duration_plot, fig.alt="Regressor for six events whose durations grow from 1 to 6 seconds. Bars below the curve show each event's duration; response peaks grow with duration."}
+plot_regressors(reg_var_dur, grid = fine_grid_dur,
+                labels = "Durations 1-6 s",
+                title = "Increasing event durations")
 ```
 
 ### Duration and Summation
 
-By default (`summate=TRUE`), the predicted response accumulates if events overlap or have extended duration. Setting `summate=FALSE` preserves the same temporal profile but the peak amplitude does not grow with duration.
+By default (`summate=TRUE`), the predicted response accumulates if events overlap or have extended duration. Setting `summate=FALSE` averages over each event's duration instead, so the peak amplitude no longer grows with duration.
 
-```{r duration_no_summate}
+```{r duration_no_summate, fig.alt="Summed and averaged regressors for six events with durations 1 to 6 seconds. The summed response grows with each longer event; the averaged response stays at about the same height."}
 # Create regressor with varying durations, summate=FALSE
 reg_var_dur_nosum <- regressor(onsets_var_dur, HRF_SPMG1,
                                duration = durations_var, summate = FALSE)
 
 # Compare summating vs non-summating using plot_regressors()
 plot_regressors(reg_var_dur, reg_var_dur_nosum,
-                labels = c("summate=TRUE", "summate=FALSE"),
-                grid = scan_times_dur,
-                title = "Effect of Summation on Response",
-                subtitle = "Same events with varying durations")
+                labels = c("summate = TRUE", "summate = FALSE"),
+                grid = fine_grid_dur,
+                title = "Summed vs. averaged responses",
+                subtitle = "Same six events, durations 1-6 s")
 ```
 
 ## Varying Event Amplitudes (Parametric Modulation)
@@ -127,18 +179,87 @@ amplitudes_scaled <- scale(amplitudes_raw, center = TRUE, scale = FALSE)
 
 # Create the parametric regressor
 reg_amp <- regressor(onsets_amp, HRF_SPMG1, amplitude = amplitudes_scaled)
-print(reg_amp)
 
-# Plot the parametric regressor
-scan_times_amp <- seq(0, max(onsets_amp) + 30, by = TR)
-plot(reg_amp, grid = scan_times_amp)
+# The centred amplitudes run from -5 to 5; the middle event has amplitude 0
+drop(amplitudes_scaled)
 ```
+
+Each event now contributes an HRF scaled by its amplitude, so early events (negative amplitudes) produce dips and late events peaks. The event with amplitude 0 contributes nothing (`regressor()` drops it):
+
+```{r parametric_modulation_plot, fig.alt="Parametric regressor for 11 events with centred amplitudes from -5 to 5. The response dips below zero for early events and rises above zero for late events; the middle event produces no response."}
+fine_grid_amp <- seq(0, max(onsets_amp) + 30, by = 0.1)
+plot_regressors(reg_amp, grid = fine_grid_amp,
+                labels = "Amplitude-modulated",
+                title = "Parametric modulation",
+                subtitle = "Mean-centred amplitudes from -5 to 5")
+```
+
+## Continuous Features
+
+A sampled feature such as RMS energy is a time series, not a list of trials.
+`feature_regressor()` encodes each sample as a zero-order-hold bin of width
+`dt` and convolves that signal with the HRF. That is the same linear model as
+amplitude modulation on this sampling grid: the predicted BOLD is \(Hx\).
+
+By default the series is demeaned before convolution (`center = TRUE`) and left
+in native units. For a whole-run series that is \(H(x-\mu 1)=Hx-\mu H1\).
+In the interior of the run, overlapping HRFs make \(H1\) nearly constant, so
+with a GLM intercept the centered and raw columns test the same effect. They
+differ by the HRF-length ramp of \(H1\) at the run boundaries; centering
+removes that onset/offset transient. `scale = "sd"` z-scores the feature, not
+the final filtered design column.
+
+```{r feature_regressor}
+dt <- 0.1
+feat_times <- seq(0, 20, by = dt)
+# Simulated acoustic envelope
+rms <- abs(sin(2 * pi * feat_times / 8)) * (0.5 + 0.5 * sin(2 * pi * feat_times / 20))
+
+feat <- feature_regressor(rms, dt = dt, hrf = HRF_SPMG1)
+```
+
+The top panel is the feature after centring, the input to the convolution; the bottom panel is the predicted BOLD response. The response lags the feature by several seconds and smooths it. Because the feature is centred, its quiet second half is below its mean, and the response dips well below zero around 20 s; that trough comes from centring, not from the HRF undershoot:
+
+```{r feature_regressor_plot, fig.height = 4.6, fig.alt="Two panels. Top: the centred acoustic envelope, oscillating around zero over 20 seconds. Bottom: the predicted BOLD response, a smoothed and delayed version that continues for about 20 seconds after the feature ends."}
+feat_grid <- seq(0, max(feat_times) + 30, by = 0.1)
+feat_df <- rbind(
+  data.frame(time = feat_times, value = rms - mean(rms),
+             panel = "Feature (centred), input"),
+  data.frame(time = feat_grid, value = evaluate(feat, feat_grid, precision = dt),
+             panel = "Predicted BOLD, output")
+)
+feat_df$panel <- factor(feat_df$panel, levels = unique(feat_df$panel))
+ggplot(feat_df, aes(time, value, colour = panel)) +
+  geom_hline(yintercept = 0, colour = "grey70", linewidth = 0.3) +
+  geom_line(linewidth = 0.9) +
+  facet_wrap(~panel, ncol = 1, scales = "free_y") +
+  scale_colour_manual(values = c("grey45", hrf_palette(1))) +
+  scale_y_continuous(breaks = function(l) {
+    b <- pretty(l, n = 3)
+    b[b >= l[1] & b <= l[2]]
+  }) +
+  labs(title = "Feature regressor", subtitle = "Input (centred feature) and output",
+       x = "Time (s)", y = NULL) +
+  theme(legend.position = "none", strip.text = element_text(hjust = 0),
+        plot.title.position = "plot")
+```
+
+Using `regressor(times, amplitude = rms, duration = 0)` instead would treat
+each sample as a unit-mass impulse and scale the predicted BOLD by about
+`1/dt`. Pass `duration = dt` (and skip centering) if you need the same ZOH
+encoding from `regressor()`.
+
+If you want intensity *conditional on an on-period*, pass a `mask` for those
+samples (off-period stays 0 after centering) and a separate boxcar for
+presence. That is not an affine transform of the all-sample series.
+Do not drop off-period samples before centering: that silently turns the
+all-sample model into the sparse one.
 
 ## Combining Duration and Amplitude Modulation
 
 You can provide both `duration` and `amplitude` vectors to model events that vary in both aspects.
 
-```{r duration_amplitude}
+```{r duration_amplitude, fig.alt="Regressor for 11 events with random durations of 1 to 5 seconds and centred amplitudes from -5 to 5. Bars below the curve show the durations; responses go from negative to positive over the run."}
 set.seed(123)
 onsets_comb <- seq(0, 10 * 12, length.out = 11)
 amps_comb <- scale(1:length(onsets_comb), center = TRUE, scale = FALSE)
@@ -146,11 +267,12 @@ durs_comb <- sample(1:5, length(onsets_comb), replace = TRUE)
 
 reg_comb <- regressor(onsets_comb, HRF_SPMG1, 
                       amplitude = amps_comb, duration = durs_comb)
-print(reg_comb)
 
-# Plot the combined regressor
-scan_times_comb <- seq(0, max(onsets_comb) + 30, by = TR)
-plot(reg_comb, grid = scan_times_comb)
+fine_grid_comb <- seq(0, max(onsets_comb) + 30, by = 0.1)
+plot_regressors(reg_comb, grid = fine_grid_comb,
+                labels = "Duration and amplitude",
+                title = "Duration and amplitude modulation",
+                subtitle = "Bar width = duration")
 ```
 
 ## Regressors with HRF Basis Sets
@@ -163,16 +285,20 @@ onsets_basis <- seq(0, 10 * 12, length.out = 11)
 hrf_basis <- HRF_BSPLINE # Uses N=5 basis functions by default
 
 reg_basis <- regressor(onsets_basis, hrf_basis)
-print(reg_basis)
 nbasis(reg_basis) # Should be 5
 
 # Evaluate - this returns a matrix
 scan_times_basis <- seq(0, max(onsets_basis) + 30, by = TR)
 pred_basis_matrix <- evaluate(reg_basis, scan_times_basis)
 dim(pred_basis_matrix) # rows = time points, cols = basis functions
+```
 
-# Plot using the plot() method - automatically handles multi-basis
-plot(reg_basis, grid = scan_times_basis)
+Each column is the event train convolved with one basis function, so the design matrix gains one column per basis function. With `layout = "stack"`, each column gets its own panel. Here we show the first five events (0–58 s): early basis functions (B1) respond right after each event, later ones progressively later. Every basis function returns to zero at the end of its 24-second span, so each column is a continuous sum of shifted copies (with a corner where each copy starts or ends).
+
+```{r basis_set_regressor_plot, fig.height = 5.5, fig.alt="Five stacked panels, one per B-spline basis function, showing the regressor columns over the first 58 seconds. B1 peaks shortly after each event and each later basis function peaks later."}
+plot_regressors(reg_basis, grid = seq(0, 58, by = 0.1), layout = "stack",
+                title = "One column per basis function",
+                subtitle = "B-spline basis (N = 5), events every 12 s")
 ```
 
 ## Shifting Regressors
@@ -189,11 +315,14 @@ reg_shifted <- shift(reg_orig, shift_amount = 5)
 onsets(reg_orig)
 onsets(reg_shifted) # Onsets are now 15, 35, 55
 
-# Compare original and shifted using plot_regressors()
-scan_times_shift <- seq(0, 80, by = TR)
+```
+
+The bars mark each regressor's onsets in its own colour; the whole response moves 5 seconds later without changing shape:
+
+```{r shift_regressor_plot, fig.alt="Original and shifted regressors for three events. The shifted curve and its onset bars are 5 seconds later; the peak heights are identical."}
 plot_regressors(reg_orig, reg_shifted,
-                labels = c("Original", "Shifted +5s"),
-                grid = scan_times_shift,
+                labels = c("Original", "Shifted +5 s"),
+                grid = seq(0, 80, by = 0.1),
                 show_onsets = TRUE,  # Show onsets for both
-                title = "Shifting a Regressor")
+                title = "Shifting a regressor")
 ```

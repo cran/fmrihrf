@@ -4,7 +4,7 @@
 \alias{hrf_spmg1}
 \title{hrf_spmg1}
 \usage{
-hrf_spmg1(t, P1 = 5, P2 = 15, A1 = 0.0833)
+hrf_spmg1(t, P1 = 5, P2 = 15, A1 = 1/120)
 }
 \arguments{
 \item{t}{A vector of time points.}
@@ -13,7 +13,7 @@ hrf_spmg1(t, P1 = 5, P2 = 15, A1 = 0.0833)
 
 \item{P2}{The second exponent parameter (default: 15).}
 
-\item{A1}{Amplitude scaling factor for the positive gamma function component; normally fixed at .0833}
+\item{A1}{Amplitude scaling factor for the positive gamma function component; normally fixed at 1/120}
 }
 \value{
 A vector of HRF values at the given time points.

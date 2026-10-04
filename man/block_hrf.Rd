@@ -16,7 +16,9 @@ block_hrf(
 \arguments{
 \item{hrf}{The HRF object (of class `HRF`) to block.}
 
-\item{width}{The width of the block in seconds.}
+\item{width}{The width of the block in seconds. Every positive width is
+integrated, including widths smaller than `precision`. Zero retains the
+original impulse response.}
 
 \item{precision}{The sampling precision in seconds used for the internal convolution (default: 0.1).}
 
@@ -24,9 +26,18 @@ block_hrf(
 
 \item{summate}{Logical; if TRUE (default), responses within the block are
 integrated (summed). If FALSE, the integrated response is divided by the
-total block weight so amplitude does not grow with block width.}
+block width to obtain a temporal average. With finite `half_life`, decay
+attenuates the integrand but does not change this divisor. This does not fix peak
+height: longer blocks can have smaller peaks. Use `normalize = TRUE` for
+unit-peak scaling.}
 
-\item{normalize}{Logical; if TRUE, the resulting blocked HRF is scaled so that its peak value is 1 (default: FALSE).}
+\item{normalize}{Logical; if TRUE, scale each basis independently by its
+peak absolute value on a fixed reference grid over the full blocked span
+(the original span plus `width`). Uses the same approximately 0.02-second
+reference spacing as [normalize_hrf()] with `"unit_peak_per_basis"`.
+The factors are computed once at construction, so scalar, vector, and
+chunked queries have the same scale. Signs are preserved and zero bases
+remain zero. Default: FALSE.}
 }
 \value{
 A new HRF object representing the blocked function.
@@ -45,6 +56,7 @@ legend("topright", legend = c("Original", "Blocked (width=5)"), col = c("blue", 
 \seealso{
 Other HRF_decorator_functions: 
 \code{\link{lag_hrf}()},
-\code{\link{normalise_hrf}()}
+\code{\link{normalise_hrf}()},
+\code{\link{normalize_hrf}()}
 }
 \concept{HRF_decorator_functions}

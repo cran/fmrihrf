@@ -10,7 +10,8 @@ Reg(
   duration = 0,
   amplitude = 1,
   span = 40,
-  summate = TRUE
+  summate = TRUE,
+  drop_zero_amplitude = TRUE
 )
 }
 \value{
@@ -24,6 +25,9 @@ An S3 object of class `Reg` (and `list`) with components:
   * `summate`: Logical indicating if overlapping HRF responses should summate.
   * `filtered_all`: Logical attribute set to `TRUE` when all events were
     removed due to zero or `NA` amplitudes.
+  * `drop_zero_amplitude`: If `TRUE` (default), events with amplitude 0 are
+    removed. `feature_regressor()` sets this to `FALSE` so a sampled feature
+    grid is preserved, including silent bins.
 }
 \description{
 Internal Constructor for Regressor Objects

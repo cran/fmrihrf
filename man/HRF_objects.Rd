@@ -37,22 +37,30 @@ A collection of pre-defined HRF objects for common fMRI analysis scenarios.
 These objects can be used directly in model specifications or as templates
 for creating custom HRFs.
 }
+\details{
+SPMG bases are raw continuous kernels. SPMG2 adds the analytic
+time derivative; SPMG3 also adds the response-dispersion difference
+\code{(h(d) - h(d + 0.01))/0.01}, holding the response mean and mass fixed.
+Columns are not implicitly orthogonalized or independently rescaled.
+Use \code{\link[=normalize_hrf]{normalize_hrf()}} or the existing normalization flags to select scaling.
+These conventions do not reproduce every sampled SPM/Nilearn design detail.
+}
 \section{Canonical HRFs}{
 
 \describe{
-  \item{\code{HRF_SPMG1}}{SPM canonical HRF (single basis function)}
-  \item{\code{HRF_SPMG2}}{SPM canonical HRF with temporal derivative (2 basis functions)}
-  \item{\code{HRF_SPMG3}}{SPM canonical HRF with temporal and dispersion derivatives (3 basis functions)}
-  \item{\code{HRF_GAMMA}}{Gamma function-based HRF}
-  \item{\code{HRF_GAUSSIAN}}{Gaussian function-based HRF}
+\item{\code{HRF_SPMG1}}{SPM canonical HRF (single basis function)}
+\item{\code{HRF_SPMG2}}{SPM canonical HRF with temporal derivative (2 basis functions)}
+\item{\code{HRF_SPMG3}}{SPM canonical HRF with temporal and dispersion derivatives (3 basis functions)}
+\item{\code{HRF_GAMMA}}{Gamma function-based HRF}
+\item{\code{HRF_GAUSSIAN}}{Gaussian function-based HRF}
 }
 }
 
 \section{Flexible Basis Sets}{
 
 \describe{
-  \item{\code{HRF_BSPLINE}}{B-spline basis HRF (5 basis functions)}
-  \item{\code{HRF_FIR}}{Finite Impulse Response (FIR) basis HRF (12 basis functions)}
+\item{\code{HRF_BSPLINE}}{B-spline basis HRF (5 basis functions)}
+\item{\code{HRF_FIR}}{Finite Impulse Response (FIR) basis HRF (12 basis functions)}
 }
 }
 
@@ -64,18 +72,18 @@ use one of these approaches:
 
 \strong{Using getHRF():}
 \itemize{
-  \item \code{getHRF("fir", nbasis = 20)} - FIR basis with 20 functions
-  \item \code{getHRF("bspline", nbasis = 10, span = 30)} - B-spline with 10 functions
-  \item \code{getHRF("fourier", nbasis = 7)} - Fourier basis with 7 functions
-  \item \code{getHRF("daguerre", nbasis = 5, scale = 3)} - Daguerre basis
+\item \code{getHRF("fir", nbasis = 20)} - FIR basis with 20 functions
+\item \code{getHRF("bspline", nbasis = 10, span = 30)} - B-spline with 10 functions
+\item \code{getHRF("fourier", nbasis = 7)} - Fourier basis with 7 functions
+\item \code{getHRF("daguerre", nbasis = 5, scale = 3)} - Daguerre basis
 }
 
 \strong{Using generator functions directly:}
 \itemize{
-  \item \code{hrf_fir_generator(nbasis = 20, span = 30)}
-  \item \code{hrf_bspline_generator(nbasis = 10, span = 30)}
-  \item \code{hrf_fourier_generator(nbasis = 7, span = 24)}
-  \item \code{hrf_daguerre_generator(nbasis = 5, scale = 3)}
+\item \code{hrf_fir_generator(nbasis = 20, span = 30)}
+\item \code{hrf_bspline_generator(nbasis = 10, span = 30)}
+\item \code{hrf_fourier_generator(nbasis = 7, span = 24)}
+\item \code{hrf_daguerre_generator(nbasis = 5, scale = 3)}
 }
 }
 
@@ -83,10 +91,10 @@ use one of these approaches:
 
 All HRF objects can be:
 \itemize{
-  \item Called as functions with time argument: \code{HRF_SPMG1(t)}
-  \item Used in model specifications: \code{hrf(condition, basis = HRF_SPMG1)}
-  \item Evaluated with \code{evaluate()} method
-  \item Combined with decorators like \code{lag_hrf()} or \code{block_hrf()}
+\item Called as functions with time argument: \code{HRF_SPMG1(t)}
+\item Used in model specifications: \code{hrf(condition, basis = HRF_SPMG1)}
+\item Evaluated with \code{evaluate()} method
+\item Combined with decorators like \code{lag_hrf()} or \code{block_hrf()}
 }
 }
 
@@ -130,8 +138,8 @@ matplot(times, bspline_response, type = "l", main = "Custom B-spline with 8 basi
 \code{\link{gen_hrf}} for creating HRFs with decorators,
 \code{\link{list_available_hrfs}} for listing all HRF types,
 \code{\link{getHRF}} for creating HRFs by name with custom parameters,
-\code{\link{hrf_fir_generator}}, \code{\link{hrf_bspline_generator}}, 
-\code{\link{hrf_fourier_generator}}, \code{\link{hrf_daguerre_generator}} 
+\code{\link{hrf_fir_generator}}, \code{\link{hrf_bspline_generator}},
+\code{\link{hrf_fourier_generator}}, \code{\link{hrf_daguerre_generator}}
 for creating custom basis sets directly
 
 Other hrf: 

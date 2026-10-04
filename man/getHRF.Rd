@@ -12,6 +12,7 @@ getHRF(
   width = 0,
   summate = TRUE,
   normalize = FALSE,
+  hrf_norm = "none",
   ...
 )
 }
@@ -38,6 +39,10 @@ getHRF(
 \item{summate}{Whether to sum responses in block designs (default: TRUE)}
 
 \item{normalize}{Whether to normalize the HRF (default: FALSE)}
+
+\item{hrf_norm}{Fixed-scale normalization mode passed to [normalize_hrf()].
+The default `"none"` leaves the HRF unchanged. `normalize = TRUE` is the
+legacy per-basis unit-peak shortcut; do not supply both.}
 
 \item{...}{Additional arguments passed to generator functions (e.g., \code{scale} for daguerre)}
 }
